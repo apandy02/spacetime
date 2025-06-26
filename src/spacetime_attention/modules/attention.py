@@ -35,6 +35,27 @@ def scaled_dot_product_attention(
     return nn.Softmax(-1)(scores)
 
 
+class MLP(nn.Module): 
+    """
+    Class implementation of the position wise MLP
+    """
+    def __init__(self, d_model: int, d_ff: int, dropout: float) -> None:
+        super(MLP, self).__init__()
+        self.fc1 = nn.Sequential(
+            nn.Linear(d_model, d_ff, bias=True), 
+            nn.ReLU()
+        )
+        self.fc2 = nn.Linear(d_ff, d_model, bias=True)
+        self.layer_norm = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        x = self.layer_norm(x)
+        x = self.fc2(self.fc1(x))
+        return self.dropout(x) + residual
+
+
 class Attention(nn.Module):
     """
     Multihead attention.
@@ -153,8 +174,20 @@ class STAttention(nn.Module):
             mask=True,  # since temporal attention is causal
         )
 
-    def forward(self, x: torch.Tensor, y: Optional[torch.Tensor] = None) -> torch.Tensor:
+        self.mlp = MLP(
+            d_model=1024,  # TODO: change to appropriate value
+            d_ff=4096,  # TODO: change to appropriate value
+            dropout=dropout,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        forward pass for spatial-temporal attention.
+        forward pass for spatial-temporal attention module.
+
+        Args:
+            x: input tensor
         """
-        return torch.Tensor(0)  # TODO: implement
+        h1 = self.spatial_attention(x) + x
+        h2 = self.temporal_attention(h1) + h1
+        return self.mlp(h2) + h2
+
