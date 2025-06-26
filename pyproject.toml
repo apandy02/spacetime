@@ -7,3 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "torch>=2.7.1",
 ]
+
+[tool.flake8]
+max-line-length = 120
+ignore = ["E501", "E203"]
