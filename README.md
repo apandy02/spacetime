@@ -1,1 +1,3 @@
-# space_time_attention
+# spacetime 
+
+learning algorithms for video tasks. 
