@@ -218,7 +218,6 @@ class STEncoderLayer(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
-        is_masked: bool = False
     ):
         super(STEncoderLayer, self).__init__()
         self.norm1, self.norm2, self.norm3 = (
@@ -229,9 +228,15 @@ class STEncoderLayer(nn.Module):
         self.mlp = MLP(num_channels, d_linear, dropout, num_linear_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        forward pass for spatial-temporal encoder layer.
+
+        Args:
+            x: input tensor
+        """
         batch, time, patches, channels = x.shape
         h = x.permute(0, 2, 1, 3).reshape(batch*patches, time, channels)  # convert to [B, patches, time, channels] to compute attention across time dimension
-        h = self.mha_time(self.norm1(h))  # 
+        h = self.mha_time(self.norm1(h))
         h = h.reshape(batch, patches, time, channels).permute(0, 2, 1, 3) + x
         h2 = h.reshape(batch*time, patches, channels)
         h2 = self.mha_space(self.norm2(h2))
@@ -240,6 +245,9 @@ class STEncoderLayer(nn.Module):
 
 
 class STEncoder(nn.Module):
+    """
+    Spatial-temporal encoder block, as implemented in TimeSformer (Bertasius et al., 2020).
+    """
     def __init__(
         self, 
         num_heads: int,
@@ -249,12 +257,11 @@ class STEncoder(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
-        is_masked: bool = False
     ):
         super(STEncoder, self).__init__()
         self.layers = nn.ModuleList([
             STEncoderLayer(
-                num_heads, num_channels, d_linear, num_linear_layers, num_groups, dropout, is_masked
+                num_heads, num_channels, d_linear, num_linear_layers, num_groups, dropout
             ) for _ in range(num_layers)
         ])
     def forward(self, x: torch.Tensor) -> torch.Tensor:
