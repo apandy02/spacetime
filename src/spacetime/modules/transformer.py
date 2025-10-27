@@ -11,28 +11,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def scaled_dot_product_attention(
-    q: torch.Tensor, k: torch.Tensor, d_k: int, mask: torch.Tensor
-) -> torch.Tensor:
-    """
-    Scaled dot product attention.
-
-    Args:
-        q: query tensor
-        k: key tensor
-        d_k: dimension of the key
-        mask: whether to use a mask
-
-    Returns:
-        attention: attention tensor
-    """
-    scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(d_k)
-    if mask:
-        mask = torch.tril(torch.ones(scores.shape)).to(q.device)
-        scores = scores.masked_fill(mask == 0, float("-inf"))
-    return nn.Softmax(-1)(scores)
-
-
 class MLP(nn.Module):
     """
     Class implementation of the position wise MLP
@@ -96,7 +74,7 @@ class Attention(nn.Module):
         self.key_projection = nn.Linear(d_model, num_heads * self.d_k)
         self.value_projection = nn.Linear(d_model, num_heads * self.d_k)
 
-        self.group_norm = nn.GroupNorm(num_groups=num_groups, d_model=d_model)
+        self.group_norm = nn.GroupNorm(num_groups=num_groups, num_channels=d_model)
         self.output_layer = nn.Linear(num_heads * self.d_k, d_model)
 
     def attention_values(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -182,7 +160,9 @@ class STTransformerLayer(nn.Module):
             nn.LayerNorm(d_model),
         )
         self.mha_space = Attention(dropout, num_heads, d_model, num_groups)
-        self.mha_time = Attention(dropout, num_heads, d_model, num_groups, causal)
+        self.mha_time = Attention(
+            dropout, num_heads, d_model, num_groups, is_masked=causal
+        )
         self.mlp = MLP(d_model, d_linear, dropout, num_linear_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

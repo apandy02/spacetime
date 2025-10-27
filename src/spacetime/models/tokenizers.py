@@ -17,6 +17,7 @@ class STVQVae(nn.Module):
         d_linear: int,
         codebook_size: int,
         latent_dim: int,
+        patch_size: int,
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
@@ -83,7 +84,7 @@ class STVQVae(nn.Module):
         """
         batch_size, channels, frames, _, _ = x.shape
         n_patch_side = self.image_size // self.patch_size
-        x = x.permute(0, 2, 1, 3, 4)
+        x = x.permute(0, 2, 1, 3, 4)  # [B, F, C, H, W]
         x = x.reshape(
             batch_size,
             frames,
@@ -93,10 +94,50 @@ class STVQVae(nn.Module):
             n_patch_side,
             self.patch_size,
         )
-        x = x.permute(0, 1, 3, 5, 2, 4, 6)
+        x = x.permute(0, 1, 3, 5, 2, 4, 6)  # [B, F, n_patch_h, n_patch_w, C, p_h, p_w]
         return x.reshape(
-            batch_size, frames, -1, channels * self.patch_size * self.patch_size
+            batch_size,
+            frames,
+            n_patch_side * n_patch_side,
+            channels * self.patch_size * self.patch_size,
         )
+
+    def _unpatchify(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Unpatches a batch of videos from patches back to full frames.
+        Reverses the patchification done by _patchify.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape [B, F, NUM_P, DIM_P]
+
+        Returns:
+            torch.Tensor: Unpatchified tensor of shape [B, C, F, H, W]
+        """
+        batch_size, frames, n_patches, patch_dim = x.shape
+        n_patch_side = int(n_patches**0.5)
+        channels = patch_dim // (self.patch_size * self.patch_size)
+
+        # Reshape to separate patch dimensions
+        x = x.reshape(
+            batch_size,
+            frames,
+            n_patch_side,
+            n_patch_side,
+            channels,
+            self.patch_size,
+            self.patch_size,
+        )  # [B, F, n_patch_h, n_patch_w, p_h, p_w]
+        x = x.permute(0, 1, 4, 2, 5, 3, 6)  # [B, F, C, n_patch_h, p_h, n_patch_w, p_w]
+        # Merge patches
+        x = x.reshape(
+            batch_size,
+            frames,
+            channels,
+            n_patch_side * self.patch_size,
+            n_patch_side * self.patch_size,
+        )
+        # Final permute to get [B, C, F, H, W]
+        return x.permute(0, 2, 1, 3, 4)
 
 
 class VQVAEVideoEncoder(nn.Module):
@@ -119,7 +160,13 @@ class VQVAEVideoEncoder(nn.Module):
         self.causal_st_encoder = nn.ModuleList(
             [
                 STTransformerLayer(
-                    num_heads, d_model, d_linear, num_linear_layers, num_groups, dropout, causal=True
+                    num_heads,
+                    d_model,
+                    d_linear,
+                    num_linear_layers,
+                    num_groups,
+                    dropout,
+                    causal=True,
                 )
                 for _ in range(num_layers)
             ]
@@ -134,7 +181,60 @@ class VQVAEVideoEncoder(nn.Module):
         """
         for layer in self.causal_st_encoder:
             x = layer(x)
-        
+
         x = self.layer_norm(x)
         x = self.codebook_projector(x)
+        return x
+
+
+class VQVAEVideoDecoder(nn.Module):
+    """
+    vq vae video decoder
+    """
+
+    def __init__(
+        self,
+        num_heads,
+        d_model: int,
+        num_layers: int,
+        d_linear: int,
+        codebook_dim: int,
+        input_image_channels: int,
+        patch_size: int,
+        num_linear_layers: int = 2,
+        num_groups: int = 8,
+        dropout: float = 0.1,
+    ):
+        super(VQVAEVideoDecoder, self).__init__()
+        self.d_model_projection = nn.Linear(codebook_dim, d_model)
+        self.st_decoder = nn.ModuleList(
+            [
+                STTransformerLayer(
+                    num_heads,
+                    d_model,
+                    d_linear,
+                    num_linear_layers,
+                    num_groups,
+                    dropout,
+                    causal=False,
+                )
+                for _ in range(num_layers)
+            ]
+        )
+        self.layer_norm = nn.LayerNorm(d_model)
+        self.reconstruction_projector = nn.Linear(
+            d_model, input_image_channels * patch_size * patch_size
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for the VQVAEVideoDecoder.
+        inputs [B,T,N,D_codebook] -> linear projection [B,T,N,D_model] -> st decoder -> layer norm -> outputs
+        """
+        x = self.d_model_projection(x)
+        for layer in self.st_decoder:
+            x = layer(x)
+        x = self.layer_norm(x)
+        x = self.reconstruction_projector(x)
+        x = self._unpatchify(x)
         return x
