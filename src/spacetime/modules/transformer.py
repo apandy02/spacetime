@@ -160,70 +160,9 @@ class Attention(nn.Module):
         return self.attention_values(x, y)
 
 
-class STAttention(nn.Module):
+class STTransformerLayer(nn.Module):
     """
-    Spatial-temporal attention block, as implemented in TimeSformer (Bertasius et al., 2020).
-
-    TODO: currently just a copy of the 2D attention.
-    """
-
-    def __init__(
-        self,
-        dropout: float,
-        num_heads: int,
-        d_model: int,
-        num_groups: int = 8,
-        d_k: Optional[int] = None,
-    ):
-        """
-        Args:
-            d_k: dimension of the key
-            dropout: dropout rate
-            num_heads: number of heads
-            d_model: number of channels
-            num_groups: number of groups for group normalization
-            mask: whether to use a mask
-        """
-        super(STAttention, self).__init__()
-        self.spatial_attention = Attention(
-            dropout=dropout,
-            num_heads=num_heads,
-            d_model=d_model,
-            num_groups=num_groups,
-            d_k=d_k,
-            is_masked=False,
-        )
-
-        self.temporal_attention = Attention(
-            dropout=dropout,
-            num_heads=num_heads,
-            d_model=d_model,
-            num_groups=num_groups,
-            d_k=d_k,
-            is_masked=True,  # since temporal attention is causal
-        )
-
-        self.mlp = MLP(
-            d_model=d_model,
-            d_ff=4096,  # TODO: change to appropriate value
-            dropout=dropout,
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        forward pass for spatial-temporal attention module.
-
-        Args:
-            x: input tensor
-        """
-        h1 = self.spatial_attention(x) + x
-        h2 = self.temporal_attention(h1) + h1
-        return self.mlp(h2) + h2
-
-
-class STEncoderLayer(nn.Module):
-    """
-    Encoder layer block for ViT
+    Spatial-temporal transformer layer block
     """
 
     def __init__(
@@ -234,15 +173,16 @@ class STEncoderLayer(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
+        causal: bool = False,
     ):
-        super(STEncoderLayer, self).__init__()
+        super(STTransformerLayer, self).__init__()
         self.norm1, self.norm2, self.norm3 = (
             nn.LayerNorm(d_model),
             nn.LayerNorm(d_model),
             nn.LayerNorm(d_model),
         )
         self.mha_space = Attention(dropout, num_heads, d_model, num_groups)
-        self.mha_time = Attention(dropout, num_heads, d_model, num_groups)
+        self.mha_time = Attention(dropout, num_heads, d_model, num_groups, causal)
         self.mlp = MLP(d_model, d_linear, dropout, num_linear_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -262,34 +202,3 @@ class STEncoderLayer(nn.Module):
         h2 = self.mha_space(self.norm2(h2))
         h2 = h2.reshape(batch, time, patches, channels) + h
         return self.mlp(self.norm3(h2)) + h2
-
-
-class STEncoder(nn.Module):
-    """
-    Spatial-temporal encoder block, as implemented in TimeSformer (Bertasius et al., 2020).
-    """
-
-    def __init__(
-        self,
-        num_heads: int,
-        d_model: int,
-        num_layers: int,
-        d_linear: int,
-        num_linear_layers: int = 2,
-        num_groups: int = 8,
-        dropout: float = 0.1,
-    ):
-        super(STEncoder, self).__init__()
-        self.layers = nn.ModuleList(
-            [
-                STEncoderLayer(
-                    num_heads, d_model, d_linear, num_linear_layers, num_groups, dropout
-                )
-                for _ in range(num_layers)
-            ]
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        for layer in self.layers:
-            x = layer(x)
-        return x

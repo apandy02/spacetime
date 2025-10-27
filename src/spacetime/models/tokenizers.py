@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from spacetime.modules.transformer import STEncoder
+from spacetime.modules.transformer import STTransformerLayer
 
 
 class STVQVae(nn.Module):
@@ -116,14 +116,13 @@ class VQVAEVideoEncoder(nn.Module):
         dropout: float = 0.1,
     ):
         super(VQVAEVideoEncoder, self).__init__()
-        self.causal_st_encoder = STEncoder(
-            num_heads,
-            d_model,
-            num_layers,
-            d_linear,
-            num_linear_layers,
-            num_groups,
-            dropout,
+        self.causal_st_encoder = nn.ModuleList(
+            [
+                STTransformerLayer(
+                    num_heads, d_model, d_linear, num_linear_layers, num_groups, dropout, causal=True
+                )
+                for _ in range(num_layers)
+            ]
         )
         self.layer_norm = nn.LayerNorm(d_model)
         self.codebook_projector = nn.Linear(d_model, codebook_dim)
@@ -133,7 +132,9 @@ class VQVAEVideoEncoder(nn.Module):
         Forward pass for the VQVAEVideoEncoder.
         inputs [B,T,N,D_model] -> causal encoder -> layer norm -> linear projection -> outputs [B,T,N,D_codebook]
         """
-        x = self.causal_st_encoder(x)
+        for layer in self.causal_st_encoder:
+            x = layer(x)
+        
         x = self.layer_norm(x)
         x = self.codebook_projector(x)
         return x
