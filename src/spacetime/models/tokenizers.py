@@ -18,14 +18,23 @@ class STVQVae(nn.Module):
         codebook_size: int,
         latent_dim: int,
         patch_size: int,
+        frame_height: int,
+        frame_width: int,
+        num_frames: int,
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
     ):
         super(STVQVae, self).__init__()
-        self.pos_embed_space = nn.Parameter(
-            torch.zeros(1, 1, self.n_patches + 1, d_model)
-        )
+        self.patch_size = patch_size
+        self.frame_height = frame_height
+        self.frame_width = frame_width
+        self.num_frames = num_frames
+        self.n_patch_h = frame_height // patch_size
+        self.n_patch_w = frame_width // patch_size
+        self.n_patches = self.n_patch_h * self.n_patch_w
+
+        self.pos_embed_space = nn.Parameter(torch.zeros(1, 1, self.n_patches, d_model))
         self.pos_embed_time = nn.Parameter(torch.zeros(1, self.num_frames, 1, d_model))
 
         self.encoder = VQVAEVideoEncoder(
@@ -33,6 +42,7 @@ class STVQVae(nn.Module):
             d_model,
             num_layers,
             d_linear,
+            latent_dim,
             num_linear_layers,
             num_groups,
             dropout=dropout,
@@ -40,7 +50,15 @@ class STVQVae(nn.Module):
         self.codebook = nn.Parameter(
             torch.randn(codebook_size, latent_dim) * 0.02, requires_grad=True
         )
-        self.decoder = None
+        self.decoder = VQVAEVideoDecoder(
+            num_heads,
+            d_model,
+            num_layers,
+            d_linear,
+            latent_dim,
+            input_image_channels=3,
+            patch_size=patch_size,
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -49,7 +67,8 @@ class STVQVae(nn.Module):
         x = self._patchify(x)
         z_e = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
         z_q = self._quantize_encoder_output(z_e)
-        return z_q
+        z_q_st = z_e + (z_q - z_e).detach()
+        return self._unpatchify(self.decoder(z_q_st)), z_e, z_q
 
     def _quantize_encoder_output(self, z_e: torch.Tensor) -> torch.Tensor:
         """
@@ -82,23 +101,24 @@ class STVQVae(nn.Module):
             torch.Tensor: Patchified tensor of shape [B, F, NUM_P, DIM_P],
                         where DIM_P = channels * patch_size * patch_size.
         """
-        batch_size, channels, frames, _, _ = x.shape
-        n_patch_side = self.image_size // self.patch_size
+        batch_size, channels, frames, height, width = x.shape
+        n_patch_h = height // self.patch_size
+        n_patch_w = width // self.patch_size
         x = x.permute(0, 2, 1, 3, 4)  # [B, F, C, H, W]
         x = x.reshape(
             batch_size,
             frames,
             channels,
-            n_patch_side,
+            n_patch_h,
             self.patch_size,
-            n_patch_side,
+            n_patch_w,
             self.patch_size,
         )
         x = x.permute(0, 1, 3, 5, 2, 4, 6)  # [B, F, n_patch_h, n_patch_w, C, p_h, p_w]
         return x.reshape(
             batch_size,
             frames,
-            n_patch_side * n_patch_side,
+            n_patch_h * n_patch_w,
             channels * self.patch_size * self.patch_size,
         )
 
@@ -113,28 +133,29 @@ class STVQVae(nn.Module):
         Returns:
             torch.Tensor: Unpatchified tensor of shape [B, C, F, H, W]
         """
-        batch_size, frames, n_patches, patch_dim = x.shape
-        n_patch_side = int(n_patches**0.5)
+        batch_size, frames, _, patch_dim = x.shape
+        n_patch_h = self.n_patch_h
+        n_patch_w = self.n_patch_w
         channels = patch_dim // (self.patch_size * self.patch_size)
 
         # Reshape to separate patch dimensions
         x = x.reshape(
             batch_size,
             frames,
-            n_patch_side,
-            n_patch_side,
+            n_patch_h,
+            n_patch_w,
             channels,
             self.patch_size,
             self.patch_size,
-        )  # [B, F, n_patch_h, n_patch_w, p_h, p_w]
+        )
         x = x.permute(0, 1, 4, 2, 5, 3, 6)  # [B, F, C, n_patch_h, p_h, n_patch_w, p_w]
         # Merge patches
         x = x.reshape(
             batch_size,
             frames,
             channels,
-            n_patch_side * self.patch_size,
-            n_patch_side * self.patch_size,
+            n_patch_h * self.patch_size,
+            n_patch_w * self.patch_size,
         )
         # Final permute to get [B, C, F, H, W]
         return x.permute(0, 2, 1, 3, 4)
