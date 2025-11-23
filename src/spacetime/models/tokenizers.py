@@ -6,7 +6,7 @@ from spacetime.modules.transformer import STTransformerLayer
 
 class STVQVae(nn.Module):
     """
-    space time vq vae tokenizer
+    space time vq vae
     """
 
     def __init__(
@@ -33,6 +33,10 @@ class STVQVae(nn.Module):
         self.n_patch_h = frame_height // patch_size
         self.n_patch_w = frame_width // patch_size
         self.n_patches = self.n_patch_h * self.n_patch_w
+
+        d_patches = 3 * patch_size * patch_size  # hardcoded for RGB
+
+        self.d_model_projection = nn.Linear(d_patches, d_model)
 
         self.pos_embed_space = nn.Parameter(torch.zeros(1, 1, self.n_patches, d_model))
         self.pos_embed_time = nn.Parameter(torch.zeros(1, self.num_frames, 1, d_model))
@@ -64,7 +68,8 @@ class STVQVae(nn.Module):
         """
         Forward pass for the STVQVAE.
         """
-        x = self._patchify(x)
+        x = self._patchify(x)  # [B, F, NUM_P, DIM_P]
+        x = self.d_model_projection(x)  # [B, F, NUM_P, D_model]
         z_e = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
         z_q = self._quantize_encoder_output(z_e)
         z_q_st = z_e + (z_q - z_e).detach()
@@ -257,5 +262,4 @@ class VQVAEVideoDecoder(nn.Module):
             x = layer(x)
         x = self.layer_norm(x)
         x = self.reconstruction_projector(x)
-        x = self._unpatchify(x)
         return x
