@@ -16,7 +16,7 @@ class STVQVae(nn.Module):
         num_layers: int,
         d_linear: int,
         codebook_size: int,
-        latent_dim: int,
+        codebook_dim: int,
         patch_size: int,
         frame_height: int,
         frame_width: int,
@@ -46,20 +46,20 @@ class STVQVae(nn.Module):
             d_model,
             num_layers,
             d_linear,
-            latent_dim,
+            codebook_dim,
             num_linear_layers,
             num_groups,
             dropout=dropout,
         )
         self.codebook = nn.Parameter(
-            torch.randn(codebook_size, latent_dim) * 0.02, requires_grad=True
+            torch.randn(codebook_size, codebook_dim) * 0.02, requires_grad=True
         )
         self.decoder = VQVAEVideoDecoder(
             num_heads,
             d_model,
             num_layers,
             d_linear,
-            latent_dim,
+            codebook_dim,
             input_image_channels=3,
             patch_size=patch_size,
         )
@@ -81,18 +81,18 @@ class STVQVae(nn.Module):
         entry. Quantizes each patch independently.
 
         Args:
-            z_e: encoded representation of shape [batch_size, frames, n_patches, latent_dim]
+            z_e: encoded representation of shape [batch_size, frames, n_patches, codebook_dim]
 
         Returns:
-            z_q: quantized representation of shape [batch_size, frames, n_patches, latent_dim]
+            z_q: quantized representation of shape [batch_size, frames, n_patches, codebook_dim]
         """
-        batch_size, frames, n_patches, latent_dim = z_e.shape
+        batch_size, frames, n_patches, codebook_dim = z_e.shape
 
-        encoded = z_e.reshape(-1, latent_dim)
+        encoded = z_e.reshape(-1, codebook_dim)
         quantized = self.codebook[
             torch.argmin(torch.cdist(encoded, self.codebook), dim=1)
         ]
-        z_q = quantized.reshape(batch_size, frames, n_patches, latent_dim)
+        z_q = quantized.reshape(batch_size, frames, n_patches, codebook_dim)
         return z_q
 
     def _patchify(self, x: torch.Tensor) -> torch.Tensor:
