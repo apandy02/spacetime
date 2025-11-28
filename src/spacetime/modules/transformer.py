@@ -148,7 +148,7 @@ class STTransformerLayer(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
-        causal: bool = False,
+        mask: Optional[Callable] = None,
     ):
         super(STTransformerLayer, self).__init__()
         self.norm1, self.norm2, self.norm3 = (
@@ -158,7 +158,7 @@ class STTransformerLayer(nn.Module):
         )
         self.mha_space = Attention(dropout, num_heads, d_model, num_groups)
         self.mha_time = Attention(
-            dropout, num_heads, d_model, num_groups, is_masked=causal
+            dropout, num_heads, d_model, num_groups, mask=mask
         )
         self.mlp = MLP(d_model, d_linear, dropout, num_linear_layers)
 
