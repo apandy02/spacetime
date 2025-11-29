@@ -108,7 +108,7 @@ class Attention(nn.Module):
 
         attn_mask = None
         if self.mask is not None:
-            attn_mask = self.mask(q, k)
+            attn_mask = self.mask(q_len, device=q.device, dtype=q.dtype)
 
         output = F.scaled_dot_product_attention(
             query=q,
@@ -116,7 +116,6 @@ class Attention(nn.Module):
             value=v,
             attn_mask=attn_mask,
             dropout_p=self.dropout.p if self.training else 0.0,
-            is_causal=self.mask and attn_mask is None,
         )
         output = self.output_layer(
             output.transpose(1, 2).contiguous().view(batch_size, q_len, -1)
