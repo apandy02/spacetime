@@ -3,8 +3,7 @@ This module contains the building blocks for a 2D attention mechanism.
 Author: Aryaman Pandya
 """
 
-import math
-from typing import Optional
+from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
@@ -52,7 +51,7 @@ class Attention(nn.Module):
         d_model: int,
         num_groups: int = 8,
         d_k: Optional[int] = None,
-        is_masked: bool = False,
+        mask: Optional[Callable] = None,
     ):
         """
         Args:
@@ -67,7 +66,7 @@ class Attention(nn.Module):
         self.d_k = d_k if d_k is not None else d_model
         self.num_heads = num_heads
         self.dropout = nn.Dropout(dropout)
-        self.mask = is_masked
+        self.mask = mask
         self.d_model = d_model
 
         self.query_projection = nn.Linear(d_model, num_heads * self.d_k)
@@ -108,10 +107,8 @@ class Attention(nn.Module):
         )
 
         attn_mask = None
-        if self.mask:
-            attn_mask = torch.tril(
-                torch.ones(q_len, k_len, device=q.device, dtype=torch.bool)
-            )
+        if self.mask is not None:
+            attn_mask = self.mask(q, k)
 
         output = F.scaled_dot_product_attention(
             query=q,
@@ -151,7 +148,7 @@ class STTransformerLayer(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
-        causal: bool = False,
+        mask: Optional[Callable] = None,
     ):
         super(STTransformerLayer, self).__init__()
         self.norm1, self.norm2, self.norm3 = (
@@ -161,7 +158,7 @@ class STTransformerLayer(nn.Module):
         )
         self.mha_space = Attention(dropout, num_heads, d_model, num_groups)
         self.mha_time = Attention(
-            dropout, num_heads, d_model, num_groups, is_masked=causal
+            dropout, num_heads, d_model, num_groups, mask=mask
         )
         self.mlp = MLP(d_model, d_linear, dropout, num_linear_layers)
 
