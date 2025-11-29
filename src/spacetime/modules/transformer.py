@@ -3,7 +3,7 @@ This module contains the building blocks for a 2D attention mechanism.
 Author: Aryaman Pandya
 """
 
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
