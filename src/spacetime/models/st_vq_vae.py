@@ -98,7 +98,10 @@ class STVQVae(nn.Module):
         x = self.d_model_projection(x)  # [B, F, NUM_P, D_model]
         z_e = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
         z_q = quantize(z_e, self.codebook)
-        z_q_st = z_e + (z_q - z_e).detach()
+        # straight through estimator: 
+        # Copy the gradient from the decoder side directly to the encoder side, 
+        # as if z_q and z_e were the same tensor.
+        z_q_st = z_e + (z_q - z_e).detach()  # 
         return unpatchify(self.decoder(z_q_st), self.patch_size, self.n_patch_h, self.n_patch_w), z_e, z_q
 
 
