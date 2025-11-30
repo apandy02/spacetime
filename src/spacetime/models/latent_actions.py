@@ -167,16 +167,16 @@ class LatentActionDecoder(nn.Module):
 
         frame_embeddings = frame_embeddings + pos_embed_space + pos_embed_time + self.token_type_embed[0].view(1, 1, 1, -1)
         action_embeddings = action_embeddings + pos_embed_space + pos_embed_time + self.token_type_embed[1].view(1, 1, 1, -1)
-        
+
         # Interleave action and frame tokens along time dimension
         batch_size, T, N, D = frame_embeddings.shape
         x = torch.stack([action_embeddings, frame_embeddings], dim=2)  # [B, T, 2, N, D]
         x = x.reshape(batch_size, 2 * T, N, D) # [a_1, f_1, a_2, f_2, ..., a_T, f_T] -> [B, 2T, N, D]
-        
+
         for layer in self.st_decoder:
             x = layer(x)
         x = self.layer_norm(x)
-        
+
         # Extract only frame positions (indices 1, 3, 5, ... i.e., odd indices)
         x = x[:, 1::2, :, :]  # [B, T, N, D]
         x = self.reconstruction_projector(x)
