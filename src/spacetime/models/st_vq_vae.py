@@ -183,7 +183,7 @@ class EMAVectorQuantizer(nn.Module):
     """
     EMA vector quantizer
     """
-    def __init__(self, codebook_size: int, codebook_dim: int, decay: float = 0.99, eps: float = 1e-5):
+    def __init__(self, codebook_size: int, codebook_dim: int, decay: float = 0.98, eps: float = 1e-5):
         super().__init__()
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim
