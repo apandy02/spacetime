@@ -4,8 +4,6 @@ Author: Aryaman Pandya
 """
 
 from typing import Optional
-
-import torch
 import torch.nn as nn
 
 
@@ -98,58 +96,3 @@ class ResBlock(nn.Module):
         h_id = self.avgpool(self.idconv(x))
 
         return self.dropout(self.activation(h + h_id))
-
-
-class ResNet(nn.Module):
-    """
-    A simple ResNet model with a series of residual blocks.
-    """
-
-    def __init__(
-        self,
-        num_channels: int,
-        num_classes: int,
-        filters: list[int],
-        activation: nn.Module,
-        stride: int = 2,
-        dropout: float = 0.2,
-    ):
-        """
-        Args:
-            num_channels: number of input channels
-            num_classes: number of output classes
-            filters: list of filter sizes
-            activation: activation function
-            stride: convolutional stride
-            dropout: dropout rate
-        """
-        super().__init__()
-        res_layers = [ResBlock(num_channels, filters[0], activation, stride=1)]
-        for i in range(len(filters) - 1):
-            res_layers += [
-                ResBlock(
-                    filters[i],
-                    filters[i + 1],
-                    activation,
-                    stride=stride,
-                    dropout=dropout,
-                )
-            ]
-        self.res_layers = nn.Sequential(*res_layers)
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.flatten = nn.Flatten()
-        self.linear = nn.Sequential(
-            nn.Linear(filters[-1], num_classes, bias=False),
-            nn.BatchNorm1d(num_classes),
-            activation(),
-        )
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x: torch.Tensor):
-        for _, layer in enumerate(self.res_layers):
-            x = layer(x)
-
-        h = self.avgpool(x)
-        h = self.flatten(h)
-        h = self.dropout(h)
-        return self.linear(h)
