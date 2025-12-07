@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from spacetime.modules.transformer import STTransformerLayer
 from spacetime.modules.utils import build_causal_mask, patchify, unpatchify
+from spacetime.modules.resnet import ResBlock
 
 class STVQVae(nn.Module):
     """
@@ -37,19 +38,16 @@ class STVQVae(nn.Module):
         self.n_patch_w = frame_width // patch_size
         self.n_patches = self.n_patch_h * self.n_patch_w
 
-        d_patches = 3 * patch_size * patch_size  # hardcoded for RGB
-
-        self.d_model_projection = nn.Linear(d_patches, d_model)
-
-        self.pos_embed_space = nn.Parameter(torch.zeros(1, 1, self.n_patches, d_model))
-        self.pos_embed_time = nn.Parameter(torch.zeros(1, self.num_frames, 1, d_model))
-
         self.encoder = VQVAEVideoEncoder(
             num_heads,
             d_model,
             num_layers,
             d_linear,
             codebook_dim,
+            num_frames,
+            frame_height,
+            frame_width,
+            patch_size,
             num_linear_layers,
             num_groups,
             dropout=dropout,
@@ -73,7 +71,7 @@ class STVQVae(nn.Module):
         """
         Forward pass for the STVQVAE.
         """
-        x = patchify(x, self.patch_size)  # [B, F, NUM_P, DIM_P]
+        #  x = patchify(x, self.patch_size)  # [B, F, NUM_P, DIM_P]  # commented out during refactoring for conv stem based down sampling
         x = self.d_model_projection(x)  # [B, F, NUM_P, D_model]
         z_e = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
         z_q, _ = self.vector_quantizer(z_e)
@@ -83,6 +81,10 @@ class STVQVae(nn.Module):
 class VQVAEVideoEncoder(nn.Module):
     """
     vq vae video encoder
+
+    New structure:
+
+    pixels → conv stem → patchify → latent grid → d_model projection → pos embeddings → ST attention → codebook projection → quantization
     """
 
     def __init__(
@@ -92,12 +94,47 @@ class VQVAEVideoEncoder(nn.Module):
         num_layers: int,
         d_linear: int,
         codebook_dim: int,
+        num_frames: int,
+        frame_height,
+        frame_width,
+        patch_size: int = 4,
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
         mask: Optional[Callable] = None,
+        conv_out_channels: Optional[list[int]] = None,
     ):
         super(VQVAEVideoEncoder, self).__init__()
+
+        self.patch_size, self.num_frames = patch_size, num_frames
+
+        if conv_out_channels is None:
+            conv_out_channels = [64, 64, 128, 128]
+
+        strides = [2 if i % 2 == 0 else 1 for i in range(len(conv_out_channels))]  # downsample and then mix alternatively
+        self.conv_stem = nn.ModuleList([
+            ResBlock(
+                in_channels=3 if i == 0 else conv_out_channels[i-1],
+                out_channels=conv_out_channels[i],
+                activation=nn.ReLU,
+                stride=strides[i],
+            )
+            for i in range(len(conv_out_channels))
+        ])
+
+        d_patches = conv_out_channels[-1] * patch_size * patch_size
+
+        self.d_model_projection = nn.Linear(d_patches, d_model)
+        
+        # Compute how much H/W are reduced by conv stem (assume stride=2 every other block)
+        div = 2 ** strides.count(2)
+        h_s, w_s = frame_height // div, frame_width // div
+        n_patch_h, n_patch_w = h_s // patch_size, w_s // patch_size
+        self.n_patches = n_patch_h * n_patch_w
+        
+        self.pos_embed_space = nn.Parameter(torch.zeros(1, 1, self.n_patches, d_model))
+        self.pos_embed_time = nn.Parameter(torch.zeros(1, self.num_frames, 1, d_model))
+
         self.causal_st_encoder = nn.ModuleList(
             [
                 STTransformerLayer(
@@ -118,8 +155,20 @@ class VQVAEVideoEncoder(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass for the VQVAEVideoEncoder.
-        inputs [B,T,N,D_model] -> causal encoder -> layer norm -> linear projection -> outputs [B,T,N,D_codebook]
+        
         """
+        b, c, f, h, w = x.shape
+        x = x.permute(0, 2, 1, 3, 4).contiguous()
+        x = x.reshape(b * f, c, h, w)
+        for block in self.conv_stem:
+            x = block(x)
+        
+        _, c_new, h_new, w_new = x.shape
+        x = x.reshape(b, f, c_new, h_new, w_new)
+        x = patchify(x, self.patch_size)
+
+        x = self.d_model_projection(x) + self.pos_embed_space + self.pos_embed_time
+        
         for layer in self.causal_st_encoder:
             x = layer(x)
 
@@ -148,6 +197,16 @@ class VQVAEVideoDecoder(nn.Module):
     ):
         super(VQVAEVideoDecoder, self).__init__()
         self.d_model_projection = nn.Linear(codebook_dim, d_model)
+        
+        self.conv_stem = nn.Sequential(
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(d_model, 128, kernel_size=3),
+            ResBlock(128, 128, nn.ReLU),
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(d_model, 64, kernel_size=3),
+            ResBlock(64, 64, nn.ReLU),
+        )
+
         self.st_decoder = nn.ModuleList(
             [
                 STTransformerLayer(

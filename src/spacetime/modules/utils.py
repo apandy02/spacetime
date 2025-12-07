@@ -10,17 +10,17 @@ def patchify(x: torch.Tensor, patch_size: int) -> torch.Tensor:
     Splits a batch of videos into non-overlapping patches.
 
     Args:
-        x (torch.Tensor): Input tensor of shape [B, C, F, H, W]
+        x (torch.Tensor): Input tensor of shape [B, C, C, H, W]
         patch_size (int): Size of each patch (height and width)
 
     Returns:
         torch.Tensor: Patchified tensor of shape [B, F, NUM_P, DIM_P],
                     where DIM_P = channels * patch_size * patch_size.
     """
-    batch_size, channels, frames, height, width = x.shape
+    batch_size, frames, channels, height, width = x.shape
     n_patch_h = height // patch_size
     n_patch_w = width // patch_size
-    x = x.permute(0, 2, 1, 3, 4)  # [B, F, C, H, W]
+
     x = x.reshape(
         batch_size,
         frames,
