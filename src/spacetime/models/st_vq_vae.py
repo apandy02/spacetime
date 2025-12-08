@@ -28,6 +28,7 @@ class STVQVae(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
+        conv_out_channels: Optional[list[int]] = None,
     ):
         super(STVQVae, self).__init__()
         self.patch_size = patch_size
@@ -37,6 +38,8 @@ class STVQVae(nn.Module):
         self.n_patch_h = frame_height // patch_size
         self.n_patch_w = frame_width // patch_size
         self.n_patches = self.n_patch_h * self.n_patch_w
+
+        conv_channels = conv_out_channels or [64, 64, 128, 128]
 
         self.encoder = VQVAEVideoEncoder(
             num_heads,
@@ -52,6 +55,7 @@ class STVQVae(nn.Module):
             num_groups,
             dropout=dropout,
             mask=build_causal_mask,
+            conv_out_channels=conv_channels,
         )
         self.codebook = nn.Parameter(
             torch.randn(codebook_size, codebook_dim) * 0.02, requires_grad=True
@@ -64,6 +68,10 @@ class STVQVae(nn.Module):
             codebook_dim,
             input_image_channels=3,
             patch_size=patch_size,
+            num_linear_layers=num_linear_layers,
+            num_groups=num_groups,
+            dropout=dropout,
+            conv_out_channels=conv_channels,
         )
         self.vector_quantizer = EMAVectorQuantizer(codebook_size, codebook_dim)
 
@@ -181,7 +189,6 @@ class VQVAEVideoDecoder(nn.Module):
     """
     vq vae video decoder
     """
-
     def __init__(
         self,
         num_heads,
@@ -194,18 +201,12 @@ class VQVAEVideoDecoder(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
+        conv_out_channels: Optional[list[int]] = None,
     ):
         super(VQVAEVideoDecoder, self).__init__()
-        self.d_model_projection = nn.Linear(codebook_dim, d_model)
+        conv_out_channels = list(reversed(conv_out_channels or [64, 64, 128, 128]))
         
-        self.conv_stem = nn.Sequential(
-            nn.Upsample(scale_factor=2),
-            nn.Conv2d(d_model, 128, kernel_size=3),
-            ResBlock(128, 128, nn.ReLU),
-            nn.Upsample(scale_factor=2),
-            nn.Conv2d(d_model, 64, kernel_size=3),
-            ResBlock(64, 64, nn.ReLU),
-        )
+        self.d_model_projection = nn.Linear(codebook_dim, d_model)
 
         self.st_decoder = nn.ModuleList(
             [
@@ -221,10 +222,21 @@ class VQVAEVideoDecoder(nn.Module):
                 for _ in range(num_layers)
             ]
         )
+
         self.layer_norm = nn.LayerNorm(d_model)
-        self.reconstruction_projector = nn.Linear(
-            d_model, input_image_channels * patch_size * patch_size
-        )
+        d_patches = conv_out_channels[0] * patch_size * patch_size
+        self.reconstruction_projector = nn.Linear(d_model, d_patches)
+
+        
+        conv_layers: list[nn.Module] = []
+        in_channels = d_model
+        for out_channels in conv_out_channels:
+            conv_layers.append(nn.Upsample(scale_factor=2))
+            conv_layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
+            conv_layers.append(ResBlock(out_channels, out_channels, nn.ReLU))
+            in_channels = out_channels
+        self.conv_stem = nn.Sequential(*conv_layers)
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
