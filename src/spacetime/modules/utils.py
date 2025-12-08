@@ -77,8 +77,7 @@ def unpatchify(
         n_patch_h * patch_size,
         n_patch_w * patch_size,
     )
-    # Final permute to get [B, C, F, H, W]
-    return x.permute(0, 2, 1, 3, 4)
+    return x
 
 
 def build_causal_mask(seq_len: int, device=None, dtype=None) -> torch.Tensor:

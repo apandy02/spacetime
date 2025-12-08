@@ -35,39 +35,45 @@ class STVQVae(nn.Module):
         self.frame_height = frame_height
         self.frame_width = frame_width
         self.num_frames = num_frames
-        self.n_patch_h = frame_height // patch_size
-        self.n_patch_w = frame_width // patch_size
-        self.n_patches = self.n_patch_h * self.n_patch_w
 
         conv_channels = conv_out_channels or [64, 64, 128, 128]
+        strides = [2 if i % 2 == 0 else 1 for i in range(len(conv_channels))]
+
+        div = 2 ** strides.count(2)
+        h_s, w_s = frame_height // div, frame_width // div
+        self.n_patch_h, self.n_patch_w = h_s // patch_size, w_s // patch_size
+        self.n_patches = self.n_patch_h * self.n_patch_w
 
         self.encoder = VQVAEVideoEncoder(
-            num_heads,
-            d_model,
-            num_layers,
-            d_linear,
-            codebook_dim,
-            num_frames,
-            frame_height,
-            frame_width,
-            patch_size,
-            num_linear_layers,
-            num_groups,
+            num_heads=num_heads,
+            d_model=d_model,
+            num_layers=num_layers,
+            d_linear=d_linear,
+            codebook_dim=codebook_dim,
+            num_frames=num_frames,
+            patch_size=patch_size,
+            num_linear_layers=num_linear_layers,
+            num_groups=num_groups,
             dropout=dropout,
             mask=build_causal_mask,
             conv_out_channels=conv_channels,
+            conv_strides=strides,
+            n_patches_h=self.n_patch_h,
+            n_patches_w=self.n_patch_w,
         )
         self.codebook = nn.Parameter(
             torch.randn(codebook_size, codebook_dim) * 0.02, requires_grad=True
         )
         self.decoder = VQVAEVideoDecoder(
-            num_heads,
-            d_model,
-            num_layers,
-            d_linear,
-            codebook_dim,
+            num_heads=num_heads,
+            d_model=d_model,
+            num_layers=num_layers,
+            d_linear=d_linear,
+            codebook_dim=codebook_dim,
             input_image_channels=3,
             patch_size=patch_size,
+            n_patches_h=self.n_patch_h,
+            n_patches_w=self.n_patch_w,
             num_linear_layers=num_linear_layers,
             num_groups=num_groups,
             dropout=dropout,
@@ -103,29 +109,28 @@ class VQVAEVideoEncoder(nn.Module):
         d_linear: int,
         codebook_dim: int,
         num_frames: int,
-        frame_height,
-        frame_width,
+        n_patches_h: int,
+        n_patches_w: int,
+        conv_out_channels: list[int],
+        conv_strides: list[int],
         patch_size: int = 4,
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
         mask: Optional[Callable] = None,
-        conv_out_channels: Optional[list[int]] = None,
     ):
         super(VQVAEVideoEncoder, self).__init__()
 
         self.patch_size, self.num_frames = patch_size, num_frames
+        self.n_patches_h, self.n_patches_w = n_patches_h, n_patches_w
+        self.n_patches = self.n_patches_h * self.n_patches_w
 
-        if conv_out_channels is None:
-            conv_out_channels = [64, 64, 128, 128]
-
-        strides = [2 if i % 2 == 0 else 1 for i in range(len(conv_out_channels))]  # downsample and then mix alternatively
         self.conv_stem = nn.ModuleList([
             ResBlock(
                 in_channels=3 if i == 0 else conv_out_channels[i-1],
                 out_channels=conv_out_channels[i],
                 activation=nn.ReLU,
-                stride=strides[i],
+                stride=conv_strides[i],
             )
             for i in range(len(conv_out_channels))
         ])
@@ -134,11 +139,6 @@ class VQVAEVideoEncoder(nn.Module):
 
         self.d_model_projection = nn.Linear(d_patches, d_model)
         
-        # Compute how much H/W are reduced by conv stem (assume stride=2 every other block)
-        div = 2 ** strides.count(2)
-        h_s, w_s = frame_height // div, frame_width // div
-        n_patch_h, n_patch_w = h_s // patch_size, w_s // patch_size
-        self.n_patches = n_patch_h * n_patch_w
         
         self.pos_embed_space = nn.Parameter(torch.zeros(1, 1, self.n_patches, d_model))
         self.pos_embed_time = nn.Parameter(torch.zeros(1, self.num_frames, 1, d_model))
@@ -198,12 +198,17 @@ class VQVAEVideoDecoder(nn.Module):
         codebook_dim: int,
         input_image_channels: int,
         patch_size: int,
+        n_patches_h: int,
+        n_patches_w: int,
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
         conv_out_channels: Optional[list[int]] = None,
     ):
         super(VQVAEVideoDecoder, self).__init__()
+        self.input_image_channels = input_image_channels
+        self.n_patches_h, self.n_patches_w = n_patches_h, n_patches_w
+
         conv_out_channels = list(reversed(conv_out_channels or [64, 64, 128, 128]))
         
         self.d_model_projection = nn.Linear(codebook_dim, d_model)
@@ -227,7 +232,6 @@ class VQVAEVideoDecoder(nn.Module):
         d_patches = conv_out_channels[0] * patch_size * patch_size
         self.reconstruction_projector = nn.Linear(d_model, d_patches)
 
-        
         conv_layers: list[nn.Module] = []
         in_channels = d_model
         for out_channels in conv_out_channels:
@@ -235,7 +239,9 @@ class VQVAEVideoDecoder(nn.Module):
             conv_layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
             conv_layers.append(ResBlock(out_channels, out_channels, nn.ReLU))
             in_channels = out_channels
+        
         self.conv_stem = nn.Sequential(*conv_layers)
+        self.final_conv = nn.Conv2d(conv_out_channels[-1], self.input_image_channels, 3)
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -248,6 +254,12 @@ class VQVAEVideoDecoder(nn.Module):
             x = layer(x)
         x = self.layer_norm(x)
         x = self.reconstruction_projector(x)
+        x = unpatchify(x, self.patch_size, self.n_patch_h, self.n_patch_w)
+        
+        b, f, c, h, w = x.shape
+        x = x.reshape(b*f, c, h, w)
+        x = self.conv_stem(x)
+        x = self.final_conv(x).reshape(b, f, self.input_image_channels, h, w)
         return x
 
 class EMAVectorQuantizer(nn.Module):
