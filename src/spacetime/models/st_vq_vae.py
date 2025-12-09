@@ -27,7 +27,7 @@ class STVQVae(nn.Module):
         num_frames: int,
         num_linear_layers: int = 2,
         num_groups: int = 8,
-        dropout: float = 0.1,
+        dropout: float = 0.2,
         conv_out_channels: Optional[list[int]] = None,
     ):
         super(STVQVae, self).__init__()
@@ -78,22 +78,21 @@ class STVQVae(nn.Module):
             num_groups=num_groups,
             dropout=dropout,
             conv_out_channels=conv_channels,
-            conv_stride=strides
+            conv_strides=strides
         )
         self.vector_quantizer = EMAVectorQuantizer(codebook_size, codebook_dim)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass for the STVQVAE.
-        """
+    def forward(self, x):
         z_e = self.encoder(x)
-        z_q, _ = self.vector_quantizer(z_e)
-        return self.decoder(z_q), z_e, z_q
+        z_q = vanilla_vector_quantizer(z_e, self.codebook)
+        z_q_st = z_e + (z_q - z_e).detach()
+        x_pred = self.decoder(z_q_st)
+        return x_pred, z_e, z_q
 
 
 class VQVAEVideoEncoder(nn.Module):
     """
-    vq vae video encoder
+    vq vae video encoders
 
     New structure:
 
@@ -225,7 +224,7 @@ class VQVAEVideoDecoder(nn.Module):
                     dropout,
                     mask=None,
                 )
-                for _ in range(num_lay  §ers)
+                for _ in range(num_layers)
             ]
         )
 
@@ -278,7 +277,7 @@ class VQVAEVideoDecoder(nn.Module):
         x = self.conv_stem(x)              # [B·T, C_dec, H, W]
         x = self.final_conv(x)             # [B·T, 3, H, W]
         x = x.reshape(b, t, self.input_image_channels, x.shape[-2], x.shape[-1])
-        return x
+        return x.permute(0, 2, 1, 3, 4)
 
 class EMAVectorQuantizer(nn.Module):
     """
