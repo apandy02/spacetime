@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from spacetime.modules.transformer import STTransformerLayer
 from spacetime.modules.utils import build_causal_mask, patchify, unpatchify
 
+
 class STVQVae(nn.Module):
     """
     space time vq vae
