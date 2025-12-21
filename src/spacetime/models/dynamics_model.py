@@ -7,8 +7,9 @@ from spacetime.modules.utils import build_causal_mask
 
 class DynamicsModel(nn.Module):
     """
-    MaskGIT based Video Dynamics model 
+    MaskGIT based Video Dynamics model
     """
+
     def __init__(
         self,
         n_heads: int,
@@ -30,7 +31,10 @@ class DynamicsModel(nn.Module):
         self.n_tokens, self.n_frames = n_tokens, n_frames
         self.d_model = d_model
         self.p_sample = p_sample
-        self.action_codebook_size, self.token_codebook_size = action_codebook_size, token_codebook_size
+        self.action_codebook_size, self.token_codebook_size = (
+            action_codebook_size,
+            token_codebook_size,
+        )
         self.st_decoder = nn.ModuleList(
             [
                 STTransformerLayer(
@@ -54,11 +58,10 @@ class DynamicsModel(nn.Module):
 
         self.action_projector = nn.Linear(action_dim, d_model)
         self.token_projector = nn.Linear(token_dim, d_model)
-    
 
     def forward(self, tokens: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
         """
-        forward pass for maskgit based dynamics model 
+        forward pass for maskgit based dynamics model
         """
         tokens = self.token_projector(tokens)
         actions = self.action_projector(actions)
@@ -69,16 +72,13 @@ class DynamicsModel(nn.Module):
 
         for layer in self.st_decoder:
             tokens = layer(tokens)
-        
+
         tokens = self.layer_norm(tokens)
         return tokens
 
-
-    
-
     def _mask(self, tokens: torch.Tensor) -> torch.Tensor:
         """
-        Bernoulli masking 
+        Bernoulli masking
         """
         batch_size, n_frames, n_tokens, _ = tokens.shape[0]
         a = torch.empty((batch_size, n_frames, n_tokens)).uniform_(0, 1)
