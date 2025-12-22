@@ -156,9 +156,7 @@ class STTransformerLayer(nn.Module):
             nn.LayerNorm(d_model),
         )
         self.mha_space = Attention(dropout, num_heads, d_model, num_groups)
-        self.mha_time = Attention(
-            dropout, num_heads, d_model, num_groups, mask=mask
-        )
+        self.mha_time = Attention(dropout, num_heads, d_model, num_groups, mask=mask)
         self.mlp = MLP(d_model, d_linear, dropout, num_linear_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

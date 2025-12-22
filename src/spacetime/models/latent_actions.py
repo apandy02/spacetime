@@ -3,14 +3,19 @@ from torch import nn
 
 from spacetime.models.st_vq_vae import VQVAEVideoEncoder, quantize
 from spacetime.modules.transformer import STTransformerLayer
-from spacetime.modules.utils import (build_anti_causal_mask, build_causal_mask,
-                                     patchify, unpatchify)
+from spacetime.modules.utils import (
+    build_anti_causal_mask,
+    build_causal_mask,
+    patchify,
+    unpatchify,
+)
 
 
 class LatentActionModel(nn.Module):
     """
     Latent action model (VAE with quantized latent actions).
     """
+
     def __init__(
         self,
         num_heads: int,
@@ -70,8 +75,10 @@ class LatentActionModel(nn.Module):
             num_groups=num_groups,
             dropout=dropout,
         )
-    
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass for the LatentActionModel (VAE with quantized latent actions).
         Takes as input:
@@ -87,7 +94,9 @@ class LatentActionModel(nn.Module):
         encoder_output = self.anti_causal_encoder(encoder_input)
         action_codes = quantize(encoder_output, self.codebook)
 
-        st_estimator_action_codes = encoder_output + (action_codes - encoder_output).detach()
+        st_estimator_action_codes = (
+            encoder_output + (action_codes - encoder_output).detach()
+        )
         frame_reconstructions = self.decoder(
             st_estimator_action_codes,
             frame_embeddings,
@@ -95,15 +104,19 @@ class LatentActionModel(nn.Module):
             self.pos_embed_time,
         )
         return (
-            unpatchify(frame_reconstructions, self.patch_size, self.n_patch_h, self.n_patch_w),
+            unpatchify(
+                frame_reconstructions, self.patch_size, self.n_patch_h, self.n_patch_w
+            ),
             encoder_output,
             action_codes,
         )
 
+
 class LatentActionDecoder(nn.Module):
     """
-    Latent action decoder block. 
+    Latent action decoder block.
     """
+
     def __init__(
         self,
         num_heads,
@@ -165,13 +178,25 @@ class LatentActionDecoder(nn.Module):
         """
         action_embeddings = self.d_model_projection(action_embeddings)
 
-        frame_embeddings = frame_embeddings + pos_embed_space + pos_embed_time + self.token_type_embed[0].view(1, 1, 1, -1)
-        action_embeddings = action_embeddings + pos_embed_space + pos_embed_time + self.token_type_embed[1].view(1, 1, 1, -1)
+        frame_embeddings = (
+            frame_embeddings
+            + pos_embed_space
+            + pos_embed_time
+            + self.token_type_embed[0].view(1, 1, 1, -1)
+        )
+        action_embeddings = (
+            action_embeddings
+            + pos_embed_space
+            + pos_embed_time
+            + self.token_type_embed[1].view(1, 1, 1, -1)
+        )
 
         # Interleave action and frame tokens along time dimension
         batch_size, T, N, D = frame_embeddings.shape
         x = torch.stack([action_embeddings, frame_embeddings], dim=2)  # [B, T, 2, N, D]
-        x = x.reshape(batch_size, 2 * T, N, D) # [a_1, f_1, a_2, f_2, ..., a_T, f_T] -> [B, 2T, N, D]
+        x = x.reshape(
+            batch_size, 2 * T, N, D
+        )  # [a_1, f_1, a_2, f_2, ..., a_T, f_T] -> [B, 2T, N, D]
 
         for layer in self.st_decoder:
             x = layer(x)

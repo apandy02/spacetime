@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from spacetime.modules.transformer import STTransformerLayer
 from spacetime.modules.utils import build_causal_mask, patchify, unpatchify
 
+
 class STVQVae(nn.Module):
     """
     space time vq vae
@@ -69,7 +70,9 @@ class STVQVae(nn.Module):
         )
         self.vector_quantizer = EMAVectorQuantizer(codebook_size, codebook_dim)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass for the STVQVAE.
         """
@@ -77,7 +80,13 @@ class STVQVae(nn.Module):
         x = self.d_model_projection(x)  # [B, F, NUM_P, D_model]
         z_e = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
         z_q, _ = self.vector_quantizer(z_e)
-        return unpatchify(self.decoder(z_q), self.patch_size, self.n_patch_h, self.n_patch_w), z_e, z_q
+        return (
+            unpatchify(
+                self.decoder(z_q), self.patch_size, self.n_patch_h, self.n_patch_w
+            ),
+            z_e,
+            z_q,
+        )
 
 
 class VQVAEVideoEncoder(nn.Module):
@@ -179,11 +188,19 @@ class VQVAEVideoDecoder(nn.Module):
         x = self.reconstruction_projector(x)
         return x
 
+
 class EMAVectorQuantizer(nn.Module):
     """
     EMA vector quantizer
     """
-    def __init__(self, codebook_size: int, codebook_dim: int, decay: float = 0.98, eps: float = 1e-5):
+
+    def __init__(
+        self,
+        codebook_size: int,
+        codebook_dim: int,
+        decay: float = 0.98,
+        eps: float = 1e-5,
+    ):
         super().__init__()
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim
@@ -191,9 +208,9 @@ class EMAVectorQuantizer(nn.Module):
         self.eps = eps
 
         embed = torch.randn(codebook_size, codebook_dim)
-        self.register_buffer('codebook', embed)
-        self.register_buffer('ema_cluster_size', torch.zeros(codebook_size))
-        self.register_buffer('ema_codebook', embed.clone())
+        self.register_buffer("codebook", embed)
+        self.register_buffer("ema_cluster_size", torch.zeros(codebook_size))
+        self.register_buffer("ema_codebook", embed.clone())
 
     def forward(self, z_e: torch.Tensor) -> torch.Tensor:
         """
@@ -207,8 +224,8 @@ class EMAVectorQuantizer(nn.Module):
         """
         z_e_flat = z_e.reshape(-1, self.codebook_dim)
 
-        z_sq = (z_e_flat ** 2).sum(dim=1, keepdim=True)
-        e_sq = (self.codebook ** 2).sum(dim=1)
+        z_sq = (z_e_flat**2).sum(dim=1, keepdim=True)
+        e_sq = (self.codebook**2).sum(dim=1)
         dist = z_sq + e_sq - 2 * z_e_flat @ self.codebook.t()
 
         indices = dist.argmin(dim=1)
@@ -220,14 +237,17 @@ class EMAVectorQuantizer(nn.Module):
                 encodings = F.one_hot(indices, self.codebook_size).type(z_e_flat.dtype)
                 cluster_size = encodings.sum(dim=0)
 
-                self.ema_cluster_size.mul_(self.decay).add_(cluster_size * (1 - self.decay))
+                self.ema_cluster_size.mul_(self.decay).add_(
+                    cluster_size * (1 - self.decay)
+                )
                 codebook_sum = encodings.t() @ z_e_flat
                 self.ema_codebook.mul_(self.decay).add_(codebook_sum * (1 - self.decay))
 
                 n = self.ema_cluster_size.sum()
                 cluster_size = (
                     (self.ema_cluster_size + self.eps)
-                    / (n + self.codebook_size * self.eps) * n
+                    / (n + self.codebook_size * self.eps)
+                    * n
                 )
 
                 cluster_size = torch.clamp(cluster_size, min=self.eps)
@@ -252,8 +272,8 @@ def vanilla_vector_quantizer(z_e: torch.Tensor, codebook: torch.Tensor) -> torch
 
     encoded = z_e.reshape(-1, codebook_dim)
 
-    z_sq = (encoded ** 2).sum(dim=1, keepdim=True)
-    e_sq = (codebook ** 2).sum(dim=1)     
+    z_sq = (encoded**2).sum(dim=1, keepdim=True)
+    e_sq = (codebook**2).sum(dim=1)
     dist = z_sq + e_sq - 2 * encoded @ codebook.t()
     indices = dist.argmin(dim=1)
     return codebook[indices].reshape(batch_size, frames, n_patches, codebook_dim)
