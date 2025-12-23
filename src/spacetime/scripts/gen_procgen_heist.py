@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 import os
 from datetime import datetime
 
@@ -18,51 +19,24 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate Procgen Heist clips with action labels."
     )
-    parser.add_argument("--env", default="heist", help="Procgen env name.")
     parser.add_argument("--clip-len", type=int, default=16, help="Frames per clip.")
     parser.add_argument(
         "--num-clips", type=int, default=10000, help="Total clips to generate."
     )
     parser.add_argument(
+        "--num-transitions",
+        type=int,
+        default=None,
+        help="Total transitions to target (overrides --num-clips).",
+    )
+    parser.add_argument(
         "--num-envs", type=int, default=8, help="Number of parallel envs."
     )
     parser.add_argument(
-        "--shard-size",
-        type=int,
-        default=256,
-        help="Clips per shard file.",
-    )
-    parser.add_argument(
-        "--out-dir",
-        default="data/procgen_heist",
-        help="Output directory for shards and metadata.",
-    )
-    parser.add_argument(
-        "--seed", type=int, default=0, help="Random seed for Procgen."
-    )
-    parser.add_argument(
-        "--num-levels",
-        type=int,
-        default=0,
-        help="Number of levels to sample (0 = unlimited).",
-    )
-    parser.add_argument(
-        "--start-level",
-        type=int,
-        default=0,
-        help="Start level offset (use different ranges for train/eval).",
-    )
-    parser.add_argument(
         "--distribution-mode",
-        default="easy",
+        default="hard",
         choices=["easy", "hard", "exploration", "memory", "extreme"],
         help="Procgen distribution mode.",
-    )
-    parser.add_argument(
-        "--repeat-action-prob",
-        type=float,
-        default=0.0,
-        help="Probability of repeating the previous action (0 = random).",
     )
     return parser.parse_args()
 
@@ -92,19 +66,24 @@ def write_shard(
 
 def main() -> None:
     args = parse_args()
-    os.makedirs(args.out_dir, exist_ok=True)
-    shard_dir = os.path.join(args.out_dir, "shards")
+    if args.num_transitions is not None:
+        args.num_clips = math.ceil(args.num_transitions / args.clip_len)
+    out_dir = "data/procgen_heist"
+    os.makedirs(out_dir, exist_ok=True)
+    shard_dir = os.path.join(out_dir, "shards")
     os.makedirs(shard_dir, exist_ok=True)
 
     env = ProcgenEnv(
         num_envs=args.num_envs,
-        env_name=args.env,
-        num_levels=args.num_levels,
-        start_level=args.start_level,
+        env_name="heist",
+        num_levels=0,
+        start_level=0,
         distribution_mode=args.distribution_mode,
-        rand_seed=args.seed,
+        rand_seed=0,
     )
     obs = env.reset()
+    if isinstance(obs, dict):
+        obs = obs["rgb"]
     action_n = env.action_space.n
 
     buffers_frames = [[] for _ in range(args.num_envs)]
@@ -115,11 +94,14 @@ def main() -> None:
     shard_actions: list[np.ndarray] = []
     shard_idx = 0
     total_clips = 0
+    shard_size = 256
 
     while total_clips < args.num_clips:
-        actions = sample_actions(action_n, last_actions, args.repeat_action_prob)
+        actions = sample_actions(action_n, last_actions, 0.0)
         last_actions = actions
         obs, _, dones, _ = env.step(actions)
+        if isinstance(obs, dict):
+            obs = obs["rgb"]
 
         for env_idx in range(args.num_envs):
             if dones[env_idx]:
@@ -142,7 +124,7 @@ def main() -> None:
                 buffers_actions[env_idx].clear()
                 total_clips += 1
 
-                if len(shard_frames) >= args.shard_size or total_clips == args.num_clips:
+                if len(shard_frames) >= shard_size or total_clips == args.num_clips:
                     write_shard(shard_dir, shard_idx, shard_frames, shard_actions)
                     shard_idx += 1
                     shard_frames.clear()
@@ -152,21 +134,23 @@ def main() -> None:
             print(f"Generated {total_clips}/{args.num_clips} clips")
 
     meta = {
-        "env": args.env,
+        "env": "heist",
         "clip_len": args.clip_len,
         "resolution": list(obs.shape[1:3]),
         "channels": int(obs.shape[-1]),
         "num_clips": args.num_clips,
+        "num_transitions_target": args.num_transitions,
+        "num_transitions_saved": int(args.num_clips * args.clip_len),
         "num_envs": args.num_envs,
-        "shard_size": args.shard_size,
-        "num_levels": args.num_levels,
-        "start_level": args.start_level,
+        "shard_size": 256,
+        "num_levels": 0,
+        "start_level": 0,
         "distribution_mode": args.distribution_mode,
-        "repeat_action_prob": args.repeat_action_prob,
-        "seed": args.seed,
+        "repeat_action_prob": 0.0,
+        "seed": 0,
         "created_at": datetime.utcnow().isoformat() + "Z",
     }
-    with open(os.path.join(args.out_dir, "meta.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(out_dir, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
 
