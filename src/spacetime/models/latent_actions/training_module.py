@@ -1,8 +1,8 @@
 import lightning as L
 import lpips
 import torch
-import wandb
 
+import wandb
 from spacetime.models.latent_actions.model import LatentActionModel
 
 

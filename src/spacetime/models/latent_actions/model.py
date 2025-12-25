@@ -3,12 +3,8 @@ from torch import nn
 
 from spacetime.models.tokenizer.model import VQVAEVideoEncoder
 from spacetime.modules.transformer import STTransformerLayer
-from spacetime.modules.utils import (
-    build_anti_causal_mask,
-    build_causal_mask,
-    patchify,
-    unpatchify,
-)
+from spacetime.modules.utils import (build_anti_causal_mask, build_causal_mask,
+                                     patchify, unpatchify)
 
 
 def quantize(z_e: torch.Tensor, codebook: torch.Tensor) -> torch.Tensor:

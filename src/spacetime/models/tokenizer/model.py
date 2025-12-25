@@ -1,14 +1,14 @@
-from enum import Enum
 from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
+from spacetime.modules.quantizers import (EMAVectorQuantizer, QuantizerType,
+                                          VanillaVectorQuantizer)
 from spacetime.modules.transformer import STTransformerLayer
 from spacetime.modules.utils import build_causal_mask, patchify, unpatchify
 
-from spacetime.modules.quantizers import EMAVectorQuantizer, QuantizerType, VanillaVectorQuantizer
+
 class VQVAEVideoEncoder(nn.Module):
     """
     vq vae video encoder

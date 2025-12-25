@@ -5,18 +5,15 @@ import lightning as L
 import torch
 import torch.nn.functional as F
 import tyro
-import wandb
 from torch.utils.data import DataLoader
 from torchvision.datasets import UCF101
 
-from spacetime.models.latent_actions.training_module import LatentActionTrainingModule
-from spacetime.utils import (
-    get_logger,
-    is_rank_zero,
-    maybe_disable_wandb_for_non_zero_ranks,
-    maybe_set_wandb_sandbox_key,
-)
-
+import wandb
+from spacetime.models.latent_actions.training_module import \
+    LatentActionTrainingModule
+from spacetime.utils import (get_logger, is_rank_zero,
+                             maybe_disable_wandb_for_non_zero_ranks,
+                             maybe_set_wandb_sandbox_key)
 
 logger = get_logger("spacetime.latent_actions")
 

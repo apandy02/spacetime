@@ -1,9 +1,9 @@
 import lightning as L
 import lpips
 import torch
-import wandb
 
-from spacetime.models.tokenizer.model import STVQVae, QuantizerType
+import wandb
+from spacetime.models.tokenizer.model import QuantizerType, STVQVae
 
 
 class STVQVaeModule(L.LightningModule):

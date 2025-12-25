@@ -4,19 +4,15 @@ from pathlib import Path
 import lightning as L
 import torch
 import tyro
-import wandb
 from torch.utils.data import DataLoader, random_split
 
+import wandb
 from spacetime.models.tokenizer.model import QuantizerType
 from spacetime.models.tokenizer.training_module import STVQVaeModule
+from spacetime.utils import (get_logger, is_rank_zero,
+                             maybe_disable_wandb_for_non_zero_ranks,
+                             maybe_set_wandb_sandbox_key)
 from spacetime.utils.data import ProcgenShardDataset
-from spacetime.utils import (
-    get_logger,
-    is_rank_zero,
-    maybe_disable_wandb_for_non_zero_ranks,
-    maybe_set_wandb_sandbox_key,
-)
-
 
 logger = get_logger("spacetime.tokenizer")
 
