@@ -10,7 +10,12 @@ from torch.utils.data import DataLoader, random_split
 from spacetime.models.tokenizer.model import QuantizerType
 from spacetime.models.tokenizer.training_module import STVQVaeModule
 from spacetime.utils.data import ProcgenShardDataset
-from spacetime.utils import get_logger, maybe_set_wandb_sandbox_key
+from spacetime.utils import (
+    get_logger,
+    is_rank_zero,
+    maybe_disable_wandb_for_non_zero_ranks,
+    maybe_set_wandb_sandbox_key,
+)
 
 
 logger = get_logger("spacetime.tokenizer")
@@ -53,15 +58,14 @@ class Config:
 
 def run(cfg: Config) -> None:
     maybe_set_wandb_sandbox_key()
+    maybe_disable_wandb_for_non_zero_ranks()
     logger.info("Starting tokenizer training")
-    logger.info("Shard dir: %s", cfg.shard_dir)
-    logger.info("Train ratio: %.2f", cfg.train_ratio)
-    logger.info("Batch size: %s | Workers: %s", cfg.batch_size, cfg.num_workers)
 
     shard_dir = cfg.shard_dir
     shard_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("loading sharded procgen dataset")
     shard_dataset = ProcgenShardDataset(shard_dir, normalize=True)
-    logger.info("Total clips: %s", len(shard_dataset))
+    logger.info("total clips loaded: %s", len(shard_dataset))
 
     train_size = int(cfg.train_ratio * len(shard_dataset))
     val_size = len(shard_dataset) - train_size
@@ -86,14 +90,15 @@ def run(cfg: Config) -> None:
         pin_memory=cfg.pin_memory,
     )
 
-    wandb.init(
-        project="genie",
-        name=(
-            f"tokenizer_{cfg.hparams.quantizer_type}_"
-            f"{cfg.hparams.num_layers}_heads{cfg.hparams.num_heads}"
-        ),
-        config=cfg.hparams,
-    )
+    if is_rank_zero():
+        wandb.init(
+            project="genie",
+            name=(
+                f"tokenizer_{cfg.hparams.quantizer_type}_"
+                f"{cfg.hparams.num_layers}_heads{cfg.hparams.num_heads}"
+            ),
+            config=cfg.hparams,
+        )
 
     lightning_module = STVQVaeModule(
         num_heads=cfg.hparams.num_heads,
@@ -118,7 +123,11 @@ def run(cfg: Config) -> None:
     )
 
     logger.info("Initializing trainer (max_epochs=%s, precision=%s)", cfg.max_epochs, cfg.precision)
-    trainer = L.Trainer(max_epochs=cfg.max_epochs, precision=cfg.precision)
+    trainer = L.Trainer(
+        max_epochs=cfg.max_epochs,
+        precision=cfg.precision,
+        strategy="ddp_find_unused_parameters_true",
+    )
     logger.info("Starting fit loop")
     trainer.fit(
         model=lightning_module,

@@ -126,8 +126,8 @@ class STVQVaeModule(L.LightningModule):
             B, C, F, H, W = x.shape
             to_lpips = lambda t: ((t * 2.0) - 1.0).reshape(B * F, C, H, W)
             lpips_val = self.lpips_metric(to_lpips(x_pred), to_lpips(x)).mean()
-        self.log("val_lpips", lpips_val, prog_bar=False, logger=True)
-        if wandb.run is not None:
+        self.log("val_lpips", lpips_val, prog_bar=False, logger=True, sync_dist=True)
+        if wandb.run is not None and self.trainer.is_global_zero:
             wandb.log({"val_lpips": lpips_val.item()}, step=self.global_step)
         return loss
 
@@ -138,10 +138,11 @@ class STVQVaeModule(L.LightningModule):
         recon = (self.example_recon.clamp(0, 1) * 255).to(torch.uint8)
         video = torch.cat([clip, recon], dim=4)
         video = video.squeeze(0).permute(1, 0, 2, 3)  # (F, C, H, W)
-        wandb.log(
-            {"recon_video": wandb.Video(video.squeeze(0), fps=4, format="mp4")},
-            step=self.global_step,
-        )
+        if wandb.run is not None and self.trainer.is_global_zero:
+            wandb.log(
+                {"recon_video": wandb.Video(video.squeeze(0), fps=4, format="mp4")},
+                step=self.global_step,
+            )
         self.example_clip = None
         self.example_recon = None
 
@@ -157,6 +158,7 @@ class STVQVaeModule(L.LightningModule):
             on_epoch=log_on_epoch,
             prog_bar=True,
             logger=True,
+            sync_dist=not is_training,
         )
         self.log(
             f"{prefix}_recon_loss",
@@ -165,6 +167,7 @@ class STVQVaeModule(L.LightningModule):
             on_epoch=log_on_epoch,
             prog_bar=False,
             logger=True,
+            sync_dist=not is_training,
         )
         self.log(
             f"{prefix}_commit_loss",
@@ -173,6 +176,7 @@ class STVQVaeModule(L.LightningModule):
             on_epoch=log_on_epoch,
             prog_bar=False,
             logger=True,
+            sync_dist=not is_training,
         )
         if self.quantizer_type == QuantizerType.VANILLA:
             self.log(
@@ -182,9 +186,10 @@ class STVQVaeModule(L.LightningModule):
                 on_epoch=log_on_epoch,
                 prog_bar=False,
                 logger=True,
+                sync_dist=not is_training,
             )
 
-        if wandb.run is not None:
+        if wandb.run is not None and self.trainer.is_global_zero:
             log_dict = {
                 f"{prefix}_loss": loss.item(),
                 f"{prefix}_recon_loss": recon_loss.item(),

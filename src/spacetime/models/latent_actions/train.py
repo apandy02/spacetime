@@ -10,7 +10,12 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import UCF101
 
 from spacetime.models.latent_actions.training_module import LatentActionTrainingModule
-from spacetime.utils import get_logger, maybe_set_wandb_sandbox_key
+from spacetime.utils import (
+    get_logger,
+    is_rank_zero,
+    maybe_disable_wandb_for_non_zero_ranks,
+    maybe_set_wandb_sandbox_key,
+)
 
 
 logger = get_logger("spacetime.latent_actions")
@@ -63,6 +68,7 @@ class Config:
 
 def run(cfg: Config) -> None:
     maybe_set_wandb_sandbox_key()
+    maybe_disable_wandb_for_non_zero_ranks()
     logger.info("Starting latent action training")
     logger.info("Data root: %s", cfg.data_root)
     logger.info("Annotation path: %s", cfg.annotation_path)
@@ -100,14 +106,15 @@ def run(cfg: Config) -> None:
         pin_memory=cfg.pin_memory,
     )
 
-    wandb.init(
-        project="spacetime",
-        name=(
-            f"latent_actions_layers{cfg.hparams.num_layers}_codebook_dim{cfg.hparams.codebook_dim}_"
-            f"actions{cfg.hparams.num_discrete_actions}_heads{cfg.hparams.num_heads}"
-        ),
-        config=cfg.hparams,
-    )
+    if is_rank_zero():
+        wandb.init(
+            project="spacetime",
+            name=(
+                f"latent_actions_layers{cfg.hparams.num_layers}_codebook_dim{cfg.hparams.codebook_dim}_"
+                f"actions{cfg.hparams.num_discrete_actions}_heads{cfg.hparams.num_heads}"
+            ),
+            config=cfg.hparams,
+        )
 
     lightning_module = LatentActionTrainingModule(
         num_heads=cfg.hparams.num_heads,
@@ -129,7 +136,11 @@ def run(cfg: Config) -> None:
     wandb.watch(lightning_module, log="gradients", log_freq=100)
 
     logger.info("Initializing trainer (max_epochs=%s, precision=%s)", cfg.max_epochs, cfg.precision)
-    trainer = L.Trainer(max_epochs=cfg.max_epochs, precision=cfg.precision)
+    trainer = L.Trainer(
+        max_epochs=cfg.max_epochs,
+        precision=cfg.precision,
+        strategy="ddp_find_unused_parameters_true",
+    )
     logger.info("Starting fit loop")
     trainer.fit(
         model=lightning_module,
