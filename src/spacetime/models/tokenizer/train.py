@@ -23,7 +23,7 @@ logger = get_logger("spacetime.tokenizer")
 
 @dataclass
 class Hyperparameters:
-    num_heads: int = 4
+    num_heads: int = 8
     d_model: int = 512
     num_layers: int = 4
     d_linear: int = 1536
@@ -36,12 +36,12 @@ class Hyperparameters:
     num_linear_layers: int = 2
     num_groups: int = 8
     dropout: float = 0.1
-    quantizer_type: str = "vanilla"
+    quantizer_type: str = "ema"
     beta: float = 0.1
     lr: float = 3e-4
     betas: tuple[float, float] = (0.9, 0.9)
     weight_decay: float = 1e-4
-    warmup_steps: int = 1_000
+    warmup_steps: int = 250
 
 
 @dataclass
@@ -94,7 +94,7 @@ def run(cfg: Config) -> None:
         wandb.init(
             project="genie",
             name=(
-                f"tokenizer_{cfg.hparams.quantizer_type}_"
+                f"tokenizer_ddp_{cfg.hparams.quantizer_type}_"
                 f"{cfg.hparams.num_layers}_heads{cfg.hparams.num_heads}"
             ),
             config=cfg.hparams,
