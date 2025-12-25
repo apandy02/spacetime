@@ -36,6 +36,11 @@ class ProcgenShardDataset(Dataset):
             self._counts.append(n)
             self._offsets.append(self._offsets[-1] + n)
 
+        # very basic last opened shard caching -- TODO: improve by using LRU cache or switching to a datapipe
+        self._cached_shard_idx = None
+        self._cached_frames = None
+        self._cached_actions = None
+
     def __len__(self) -> int:
         return self._offsets[-1]
 
@@ -48,9 +53,16 @@ class ProcgenShardDataset(Dataset):
 
         local_idx = idx - self._offsets[shard_idx]
         shard_path = self.shards[shard_idx]
-        with np.load(shard_path) as data:
-            frames = data["frames"][local_idx]
-            actions = data["actions"][local_idx] if "actions" in data else None
+        if self._cached_shard_idx != shard_idx:
+            with np.load(shard_path) as data:
+                self._cached_frames = data["frames"]
+                self._cached_actions = data["actions"] if "actions" in data else None
+            self._cached_shard_idx = shard_idx
+
+        frames = self._cached_frames[local_idx]
+        actions = (
+            self._cached_actions[local_idx] if self._cached_actions is not None else None
+        )
 
         frames = torch.from_numpy(frames)
         if self.normalize:
