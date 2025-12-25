@@ -85,16 +85,17 @@ def build_causal_mask(seq_len: int, device=None, dtype=None) -> torch.Tensor:
     """
     Causal mask: each position can only attend to itself and earlier positions.
     """
-    return torch.tril(torch.ones(seq_len, seq_len, device=device, dtype=dtype))
+    mask = torch.tril(torch.ones(seq_len, seq_len, device=device, dtype=torch.bool))
+    return ~mask
 
 
 def build_anti_causal_mask(seq_len: int, device=None, dtype=None) -> torch.Tensor:
     """
     Anti causal mask for the transformer that allows attention to one token in the future.
     """
-    tril = torch.tril(torch.ones(seq_len, seq_len, device=device, dtype=dtype))
+    tril = torch.tril(torch.ones(seq_len, seq_len, device=device, dtype=torch.bool))
     superdiag = torch.diag(
-        torch.ones(seq_len - 1, device=device, dtype=dtype), diagonal=1
+        torch.ones(seq_len - 1, device=device, dtype=torch.bool), diagonal=1
     )
-    mask = tril + superdiag
-    return mask.clamp(max=1)
+    mask = tril | superdiag
+    return ~mask

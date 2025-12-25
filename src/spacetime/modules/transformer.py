@@ -175,4 +175,4 @@ class STTransformerLayer(nn.Module):
         h2 = h.reshape(batch * time, patches, channels)
         h2 = self.mha_space(self.norm2(h2))
         h2 = h2.reshape(batch, time, patches, channels) + h
-        return self.mlp(self.norm3(h2)) + h2
+        return self.mlp(self.norm3(h2))

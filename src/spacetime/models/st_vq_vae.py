@@ -278,9 +278,6 @@ class STVQVae(nn.Module):
             dropout=dropout,
             mask=build_causal_mask,
         )
-        self.codebook = nn.Parameter(
-            torch.randn(codebook_size, codebook_dim) * 0.02, requires_grad=True
-        )
         self.decoder = VQVAEVideoDecoder(
             num_heads,
             d_model,
@@ -304,9 +301,10 @@ class STVQVae(nn.Module):
         x = self.d_model_projection(x)  # [B, F, NUM_P, D_model]
         z_e = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
         z_q, _ = self.vector_quantizer(z_e)
+        z_q_st = z_e + (z_q - z_e).detach()
         return (
             unpatchify(
-                self.decoder(z_q), self.patch_size, self.n_patch_h, self.n_patch_w
+                self.decoder(z_q_st), self.patch_size, self.n_patch_h, self.n_patch_w
             ),
             z_e,
             z_q,

@@ -80,7 +80,7 @@ class DynamicsModel(nn.Module):
         """
         Bernoulli masking
         """
-        batch_size, n_frames, n_tokens, _ = tokens.shape[0]
+        batch_size, n_frames, n_tokens, _ = tokens.shape
         a = torch.empty((batch_size, n_frames, n_tokens)).uniform_(0, 1)
         mask = a < self.p_sample
         tokens = torch.where(mask[..., None], self.mask_embed, tokens)
