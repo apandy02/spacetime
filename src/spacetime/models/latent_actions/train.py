@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,11 +10,10 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import UCF101
 
 from spacetime.models.latent_actions.training_module import LatentActionTrainingModule
+from spacetime.utils import get_logger, maybe_set_wandb_sandbox_key
 
 
-def _maybe_set_wandb_sandbox_key() -> None:
-    if "WANDB_API_KEY_SANDBOX" in os.environ:
-        os.environ["WANDB_API_KEY"] = os.environ["WANDB_API_KEY_SANDBOX"]
+logger = get_logger("spacetime.latent_actions")
 
 
 def collate_ucf101(batch):
@@ -64,7 +62,11 @@ class Config:
 
 
 def run(cfg: Config) -> None:
-    _maybe_set_wandb_sandbox_key()
+    maybe_set_wandb_sandbox_key()
+    logger.info("Starting latent action training")
+    logger.info("Data root: %s", cfg.data_root)
+    logger.info("Annotation path: %s", cfg.annotation_path)
+    logger.info("Train/val batch sizes: %s/%s", cfg.train_batch_size, cfg.val_batch_size)
 
     train_dataset = UCF101(
         root=str(cfg.data_root),
@@ -126,7 +128,9 @@ def run(cfg: Config) -> None:
 
     wandb.watch(lightning_module, log="gradients", log_freq=100)
 
+    logger.info("Initializing trainer (max_epochs=%s, precision=%s)", cfg.max_epochs, cfg.precision)
     trainer = L.Trainer(max_epochs=cfg.max_epochs, precision=cfg.precision)
+    logger.info("Starting fit loop")
     trainer.fit(
         model=lightning_module,
         train_dataloaders=train_dataloader,
@@ -134,6 +138,7 @@ def run(cfg: Config) -> None:
     )
 
     wandb.finish()
+    logger.info("Training complete")
 
 
 def main() -> None:
@@ -143,3 +148,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    logger.info("Train clips: %s | Val clips: %s", len(train_dataset), len(val_dataset))

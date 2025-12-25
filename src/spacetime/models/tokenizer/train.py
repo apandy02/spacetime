@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,12 +10,10 @@ from torch.utils.data import DataLoader, random_split
 from spacetime.models.tokenizer.model import QuantizerType
 from spacetime.models.tokenizer.training_module import STVQVaeModule
 from spacetime.utils.data import ProcgenShardDataset
+from spacetime.utils import get_logger, maybe_set_wandb_sandbox_key
 
 
-def _maybe_set_wandb_sandbox_key() -> None:
-    if "WANDB_API_KEY_SANDBOX" in os.environ:
-        print("Using sandbox key")
-        os.environ["WANDB_API_KEY"] = os.environ["WANDB_API_KEY_SANDBOX"]
+logger = get_logger("spacetime.tokenizer")
 
 
 @dataclass
@@ -55,11 +52,16 @@ class Config:
 
 
 def run(cfg: Config) -> None:
-    _maybe_set_wandb_sandbox_key()
+    maybe_set_wandb_sandbox_key()
+    logger.info("Starting tokenizer training")
+    logger.info("Shard dir: %s", cfg.shard_dir)
+    logger.info("Train ratio: %.2f", cfg.train_ratio)
+    logger.info("Batch size: %s | Workers: %s", cfg.batch_size, cfg.num_workers)
 
     shard_dir = cfg.shard_dir
     shard_dir.mkdir(parents=True, exist_ok=True)
     shard_dataset = ProcgenShardDataset(shard_dir, normalize=True)
+    logger.info("Total clips: %s", len(shard_dataset))
 
     train_size = int(cfg.train_ratio * len(shard_dataset))
     val_size = len(shard_dataset) - train_size
@@ -115,7 +117,9 @@ def run(cfg: Config) -> None:
         warmup_steps=cfg.hparams.warmup_steps,
     )
 
+    logger.info("Initializing trainer (max_epochs=%s, precision=%s)", cfg.max_epochs, cfg.precision)
     trainer = L.Trainer(max_epochs=cfg.max_epochs, precision=cfg.precision)
+    logger.info("Starting fit loop")
     trainer.fit(
         model=lightning_module,
         train_dataloaders=train_dataloader,
@@ -123,6 +127,7 @@ def run(cfg: Config) -> None:
     )
 
     wandb.finish()
+    logger.info("Training complete")
 
 
 def main() -> None:
