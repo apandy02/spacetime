@@ -48,7 +48,7 @@ class Config:
     num_workers: int = 8
     pin_memory: bool = True
     max_epochs: int = 10
-    precision: int = 16
+    precision: str = "bf16-mixed"
     hparams: Hyperparameters = Hyperparameters()
 
 
