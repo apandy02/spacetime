@@ -1,0 +1,118 @@
+class QuantizerType(Enum):
+    """Quantizer type enum"""
+
+    VANILLA = "vanilla"
+    EMA = "ema"
+
+
+class EMAVectorQuantizer(nn.Module):
+    """
+    EMA vector quantizer
+    """
+
+    def __init__(
+        self,
+        codebook_size: int,
+        codebook_dim: int,
+        decay: float = 0.98,
+        eps: float = 1e-5,
+    ):
+        super().__init__()
+        self.codebook_size = codebook_size
+        self.codebook_dim = codebook_dim
+        self.decay = decay
+        self.eps = eps
+
+        embed = torch.randn(codebook_size, codebook_dim)
+        self.register_buffer("codebook", embed)
+        self.register_buffer("ema_cluster_size", torch.zeros(codebook_size))
+        self.register_buffer("ema_codebook", embed.clone())
+
+    def forward(self, z_e: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for the EMAVectorQuantizer.
+
+        Args:
+            z_e: encoded representation of shape [batch_size, frames, n_patches, codebook_dim]
+
+        Returns:
+            z_q: quantized representation of shape [batch_size, frames, n_patches, codebook_dim]
+        """
+        z_e_flat = z_e.reshape(-1, self.codebook_dim)
+
+        z_sq = (z_e_flat**2).sum(dim=1, keepdim=True)
+        e_sq = (self.codebook**2).sum(dim=1)
+        dist = z_sq + e_sq - 2 * z_e_flat @ self.codebook.t()
+
+        indices = dist.argmin(dim=1)
+        z_q_flat = self.codebook[indices]
+        z_q = z_q_flat.view_as(z_e)
+
+        if self.training:
+            with torch.no_grad():
+                encodings = F.one_hot(indices, self.codebook_size).type(z_e_flat.dtype)
+                cluster_size = encodings.sum(dim=0)
+
+                self.ema_cluster_size.mul_(self.decay).add_(
+                    cluster_size * (1 - self.decay)
+                )
+                codebook_sum = encodings.t() @ z_e_flat
+                self.ema_codebook.mul_(self.decay).add_(codebook_sum * (1 - self.decay))
+
+                n = self.ema_cluster_size.sum()
+                cluster_size = (
+                    (self.ema_cluster_size + self.eps)
+                    / (n + self.codebook_size * self.eps)
+                    * n
+                )
+
+                cluster_size = torch.clamp(cluster_size, min=self.eps)
+                self.codebook.copy_(self.ema_codebook / cluster_size.unsqueeze(1))
+
+        return z_q, indices
+
+
+class VanillaVectorQuantizer(nn.Module):
+    """
+    Quantize encoded tensor by snapping its elements to the closest codebook entry.
+    Quantizes each patch independently.
+
+    Args:
+        codebook_size: number of codebook entries
+        codebook_dim: dimensionality of codebook vectors
+
+    Usage:
+        quantizer = VanillaVectorQuantizer(codebook_size, codebook_dim)
+        z_q, indices = quantizer(z_e)
+    """
+
+    def __init__(self, codebook_size: int, codebook_dim: int):
+        super().__init__()
+        self.codebook_size = codebook_size
+        self.codebook_dim = codebook_dim
+        self.codebook = nn.Parameter(
+            torch.randn(codebook_size, codebook_dim) * 0.02, requires_grad=True
+        )
+
+    def forward(self, z_e: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            z_e: encoded representation of shape [batch_size, frames, n_patches, codebook_dim]
+        Returns:
+            z_q: quantized representation [batch_size, frames, n_patches, codebook_dim]
+            indices: indices of closest codebook entries [batch_size, frames, n_patches]
+        """
+        batch_size, frames, n_patches, codebook_dim = z_e.shape
+        assert codebook_dim == self.codebook_dim
+
+        encoded = z_e.reshape(-1, codebook_dim)
+
+        z_sq = (encoded**2).sum(dim=1, keepdim=True)
+        e_sq = (self.codebook**2).sum(dim=1)
+        dist = z_sq + e_sq - 2 * encoded @ self.codebook.t()
+        indices = dist.argmin(dim=1)
+        z_q = self.codebook[indices].reshape(
+            batch_size, frames, n_patches, codebook_dim
+        )
+        indices = indices.view(batch_size, frames, n_patches)
+        return z_q, indices

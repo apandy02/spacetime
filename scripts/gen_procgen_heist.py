@@ -6,13 +6,7 @@ import os
 from datetime import datetime
 
 import numpy as np
-
-try:
-    from procgen import ProcgenEnv
-except ImportError as exc:
-    raise SystemExit(
-        "procgen is required. Install with `pip install procgen`."
-    ) from exc
+from procgen import ProcgenEnv
 
 
 def parse_args() -> argparse.Namespace:
