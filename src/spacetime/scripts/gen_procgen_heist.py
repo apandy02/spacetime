@@ -117,9 +117,7 @@ def main() -> None:
                 clip = np.stack(buffers_frames[env_idx], axis=0)  # [F, H, W, C]
                 clip = clip.transpose(3, 0, 1, 2)  # [C, F, H, W]
                 shard_frames.append(clip)
-                shard_actions.append(
-                    np.array(buffers_actions[env_idx], dtype=np.int64)
-                )
+                shard_actions.append(np.array(buffers_actions[env_idx], dtype=np.int64))
                 buffers_frames[env_idx].clear()
                 buffers_actions[env_idx].clear()
                 total_clips += 1
