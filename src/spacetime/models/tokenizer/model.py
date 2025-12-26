@@ -130,6 +130,8 @@ class STVQVae(nn.Module):
         num_groups: int = 8,
         dropout: float = 0.1,
         quantizer_type: QuantizerType = QuantizerType.EMA,
+        quantizer_decay: float = 0.95,
+        quantizer_eps: float = 1e-5,
     ):
         super(STVQVae, self).__init__()
         self.patch_size = patch_size
@@ -167,33 +169,42 @@ class STVQVae(nn.Module):
             input_image_channels=3,
             patch_size=patch_size,
         )
-        self.vector_quantizer = self.quantizer_factory(quantizer_type)(
-            codebook_size, codebook_dim
-        )
+        if quantizer_type == QuantizerType.EMA:
+            self.vector_quantizer = EMAVectorQuantizer(
+                codebook_size, codebook_dim, decay=quantizer_decay, eps=quantizer_eps
+            )
+        elif quantizer_type == QuantizerType.VANILLA:
+            self.vector_quantizer = VanillaVectorQuantizer(codebook_size, codebook_dim)
+        else:
+            raise ValueError(f"Invalid quantizer type: {quantizer_type}")
 
     def forward(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        self, x: torch.Tensor, return_indices: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor] | tuple[
+        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
+    ]:
         """
         Forward pass for the STVQVAE.
         """
         x = patchify(x, self.patch_size)  # [B, F, NUM_P, DIM_P]
         x = self.d_model_projection(x)  # [B, F, NUM_P, D_model]
         z_e = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
-        z_q, _ = self.vector_quantizer(z_e)
+        z_q, indices = self.vector_quantizer(z_e)
         z_q_st = z_e + (z_q - z_e).detach()
-        return (
+        outputs = (
             unpatchify(
                 self.decoder(z_q_st), self.patch_size, self.n_patch_h, self.n_patch_w
             ),
             z_e,
             z_q,
         )
+        if return_indices:
+            return outputs + (indices,)
+        return outputs
 
     def quantizer_factory(self, quantizer_type: QuantizerType) -> nn.Module:
         if quantizer_type == QuantizerType.VANILLA:
             return VanillaVectorQuantizer
-        elif quantizer_type == QuantizerType.EMA:
+        if quantizer_type == QuantizerType.EMA:
             return EMAVectorQuantizer
-        else:
-            raise ValueError(f"Invalid quantizer type: {quantizer_type}")
+        raise ValueError(f"Invalid quantizer type: {quantizer_type}")

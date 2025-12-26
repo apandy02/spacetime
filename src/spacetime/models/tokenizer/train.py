@@ -33,11 +33,16 @@ class Hyperparameters:
     num_groups: int = 8
     dropout: float = 0.1
     quantizer_type: str = "ema"
-    beta: float = 0.1
+    beta_start: float = 0.05
+    beta_end: float = 0.35
+    beta_warmup_steps: int = 10_000
     lr: float = 3e-4
+    lr_quant: float = 1e-4
     betas: tuple[float, float] = (0.9, 0.9)
     weight_decay: float = 1e-4
-    warmup_steps: int = 250
+    warmup_steps: int = 1000
+    quantizer_decay: float = 0.985
+    quantizer_eps: float = 1e-5
 
 
 @dataclass
@@ -47,7 +52,7 @@ class Config:
     batch_size: int = 48
     num_workers: int = 8
     pin_memory: bool = True
-    max_epochs: int = 10
+    max_epochs: int = 100
     precision: str = "bf16-mixed"
     hparams: Hyperparameters = Hyperparameters()
 
@@ -111,11 +116,16 @@ def run(cfg: Config) -> None:
         num_groups=cfg.hparams.num_groups,
         dropout=cfg.hparams.dropout,
         quantizer_type=QuantizerType(cfg.hparams.quantizer_type),
-        beta=cfg.hparams.beta,
+        beta_start=cfg.hparams.beta_start,
+        beta_end=cfg.hparams.beta_end,
+        beta_warmup_steps=cfg.hparams.beta_warmup_steps,
         lr=cfg.hparams.lr,
+        lr_quant=cfg.hparams.lr_quant,
         betas=tuple(cfg.hparams.betas),
         weight_decay=cfg.hparams.weight_decay,
         warmup_steps=cfg.hparams.warmup_steps,
+        quantizer_decay=cfg.hparams.quantizer_decay,
+        quantizer_eps=cfg.hparams.quantizer_eps,
     )
 
     logger.info("Initializing trainer (max_epochs=%s, precision=%s)", cfg.max_epochs, cfg.precision)

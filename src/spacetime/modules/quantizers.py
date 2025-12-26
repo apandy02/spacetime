@@ -21,7 +21,7 @@ class EMAVectorQuantizer(nn.Module):
         self,
         codebook_size: int,
         codebook_dim: int,
-        decay: float = 0.98,
+        decay: float = 0.95,
         eps: float = 1e-5,
     ):
         super().__init__()

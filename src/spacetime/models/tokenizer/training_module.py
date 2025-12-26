@@ -23,11 +23,16 @@ class STVQVaeModule(L.LightningModule):
         num_linear_layers=2,
         num_groups=8,
         dropout=0.1,
-        beta=0.1,
+        beta_start=0.05,
+        beta_end=0.35,
+        beta_warmup_steps=10_000,
         lr=3e-4,
+        lr_quant=1e-4,
         betas=(0.9, 0.9),
         weight_decay=1e-4,
         warmup_steps=1_000,
+        quantizer_decay=0.985,
+        quantizer_eps=1e-5,
     ):
         super().__init__()
         self.model = STVQVae(
@@ -45,12 +50,17 @@ class STVQVaeModule(L.LightningModule):
             num_groups=num_groups,
             dropout=dropout,
             quantizer_type=quantizer_type,
+            quantizer_decay=quantizer_decay,
+            quantizer_eps=quantizer_eps,
         )
         self.quantizer_type = quantizer_type
-        self.beta = beta
+        self.beta_start = beta_start
+        self.beta_end = beta_end
+        self.beta_warmup_steps = beta_warmup_steps
         self.example_clip = None
         self.example_recon = None
         self.lr = lr
+        self.lr_quant = lr_quant
         self.betas = betas
         self.weight_decay = weight_decay
         self.warmup_steps = warmup_steps
@@ -68,9 +78,24 @@ class STVQVaeModule(L.LightningModule):
         self.lpips_metric.to(self.device)
 
     def configure_optimizers(self):
+        main_params = []
+        quant_params = []
+        for name, param in self.model.named_parameters():
+            if not param.requires_grad:
+                continue
+            if "vector_quantizer" in name:
+                quant_params.append(param)
+            else:
+                main_params.append(param)
+
+        param_groups = [
+            {"params": main_params, "lr": self.lr},
+        ]
+        if quant_params:
+            param_groups.append({"params": quant_params, "lr": self.lr_quant})
+
         optimizer = torch.optim.AdamW(
-            self.model.parameters(),
-            lr=self.lr,
+            param_groups,
             betas=self.betas,
             weight_decay=self.weight_decay,
         )
@@ -90,7 +115,12 @@ class STVQVaeModule(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, _ = batch
-        x_pred, z_e, z_quantized = self(x)
+        outputs = self.model(x, return_indices=True)
+        if len(outputs) == 4:
+            x_pred, z_e, z_quantized, indices = outputs
+        else:
+            x_pred, z_e, z_quantized = outputs
+            indices = None
         recon_loss = torch.nn.functional.mse_loss(x_pred, x)
         commit_loss = torch.nn.functional.mse_loss(z_e, z_quantized.detach())
         codebook_loss = (
@@ -98,9 +128,13 @@ class STVQVaeModule(L.LightningModule):
             if self.quantizer_type == QuantizerType.VANILLA
             else 0.0
         )
-        loss = recon_loss + (self.beta * commit_loss) + codebook_loss
+        beta = self._current_beta()
+        loss = recon_loss + (beta * commit_loss) + codebook_loss
 
         self._log_losses(loss, recon_loss, commit_loss, codebook_loss, is_training=True)
+        if wandb.run is not None and self.trainer.is_global_zero:
+            wandb.log({"train_beta": beta}, step=self.global_step)
+        self._log_codebook_usage(indices, is_training=True)
 
         if batch_idx == 0:
             self.example_clip = x[:1].detach().cpu()
@@ -109,7 +143,12 @@ class STVQVaeModule(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, _ = batch
-        x_pred, z_e, z_quantized = self(x)
+        outputs = self.model(x, return_indices=True)
+        if len(outputs) == 4:
+            x_pred, z_e, z_quantized, indices = outputs
+        else:
+            x_pred, z_e, z_quantized = outputs
+            indices = None
         recon_loss = torch.nn.functional.mse_loss(x_pred, x)
         commit_loss = torch.nn.functional.mse_loss(z_e, z_quantized.detach())
         codebook_loss = (
@@ -117,9 +156,11 @@ class STVQVaeModule(L.LightningModule):
             if self.quantizer_type == QuantizerType.VANILLA
             else 0.0
         )
-        loss = recon_loss + (self.beta * commit_loss) + codebook_loss
+        beta = self._current_beta()
+        loss = recon_loss + (beta * commit_loss) + codebook_loss
 
         self._log_losses(loss, recon_loss, commit_loss, codebook_loss, is_training=False)
+        self._log_codebook_usage(indices, is_training=False)
 
         with torch.no_grad():
             # LPIPS expects inputs in [-1,1]; convert if in [0,1].
@@ -198,3 +239,49 @@ class STVQVaeModule(L.LightningModule):
             if self.quantizer_type == QuantizerType.VANILLA:
                 log_dict[f"{prefix}_codebook_loss"] = codebook_loss.item()
             wandb.log(log_dict, step=self.global_step)
+
+    def _log_codebook_usage(self, indices, is_training: bool) -> None:
+        if indices is None:
+            return
+
+        codebook_size = self.model.vector_quantizer.codebook_size
+        flat_indices = indices.reshape(-1)
+        counts = torch.bincount(flat_indices, minlength=codebook_size).float()
+        usage = (counts > 0).float().mean()
+        probs = counts / (counts.sum() + 1e-8)
+        perplexity = torch.exp(-(probs * (probs + 1e-8).log()).sum())
+
+        prefix = "train" if is_training else "val"
+        self.log(
+            f"{prefix}_codebook_usage",
+            usage,
+            on_step=is_training,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+            sync_dist=not is_training,
+        )
+        self.log(
+            f"{prefix}_codebook_perplexity",
+            perplexity,
+            on_step=is_training,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+            sync_dist=not is_training,
+        )
+
+        if wandb.run is not None and self.trainer.is_global_zero:
+            wandb.log(
+                {
+                    f"{prefix}_codebook_usage": usage.item(),
+                    f"{prefix}_codebook_perplexity": perplexity.item(),
+                },
+                step=self.global_step,
+            )
+
+    def _current_beta(self) -> float:
+        if self.beta_warmup_steps <= 0:
+            return self.beta_end
+        progress = min(1.0, (self.global_step + 1) / self.beta_warmup_steps)
+        return self.beta_start + progress * (self.beta_end - self.beta_start)
