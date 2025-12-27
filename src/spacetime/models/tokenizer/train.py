@@ -34,13 +34,13 @@ class Hyperparameters:
     dropout: float = 0.1
     quantizer_type: str = "ema"
     beta_start: float = 0.05
-    beta_end: float = 0.35
+    beta_end: float = 0.25
     beta_warmup_steps: int = 10_000
     lr: float = 3e-4
     lr_quant: float = 1e-4
-    betas: tuple[float, float] = (0.9, 0.9)
+    betas: tuple[float, float] = (0.9, 0.99)
     weight_decay: float = 1e-4
-    warmup_steps: int = 1000
+    warmup_steps: int = 10_000
     quantizer_decay: float = 0.985
     quantizer_eps: float = 1e-5
 
@@ -92,12 +92,23 @@ def run(cfg: Config) -> None:
     )
 
     if is_rank_zero():
+        quant_suffix = (
+            f"_ema_d{cfg.hparams.quantizer_decay}"
+            if cfg.hparams.quantizer_type == "ema"
+            else "_vanilla"
+        )
+        lr_suffix = (
+            f"_lr{cfg.hparams.lr}"
+            if cfg.hparams.quantizer_type == "ema"
+            else f"_lr{cfg.hparams.lr}_lq{cfg.hparams.lr_quant}"
+        )
+        name = (
+            f"tokenizer{quant_suffix}_L{cfg.hparams.num_layers}_H{cfg.hparams.num_heads}"
+            f"{lr_suffix}_b{cfg.hparams.beta_start}to{cfg.hparams.beta_end}"
+        )
         wandb.init(
             project="genie",
-            name=(
-                f"tokenizer_ddp_{cfg.hparams.quantizer_type}_"
-                f"{cfg.hparams.num_layers}_heads{cfg.hparams.num_heads}"
-            ),
+            name=name,
             config=cfg.hparams,
         )
 

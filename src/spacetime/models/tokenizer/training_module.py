@@ -135,6 +135,7 @@ class STVQVaeModule(L.LightningModule):
         if wandb.run is not None and self.trainer.is_global_zero:
             wandb.log({"train_beta": beta}, step=self.global_step)
         self._log_codebook_usage(indices, is_training=True)
+        self._log_lrs()
 
         if batch_idx == 0:
             self.example_clip = x[:1].detach().cpu()
@@ -285,3 +286,46 @@ class STVQVaeModule(L.LightningModule):
             return self.beta_end
         progress = min(1.0, (self.global_step + 1) / self.beta_warmup_steps)
         return self.beta_start + progress * (self.beta_end - self.beta_start)
+
+    def _log_lrs(self) -> None:
+        if self.global_step % 50 != 0:
+            return
+        if not self.trainer or not self.trainer.optimizers:
+            return
+        optimizer = self.trainer.optimizers[0]
+        if not optimizer.param_groups:
+            return
+        lr_main = optimizer.param_groups[0].get("lr", None)
+        lr_quant = (
+            optimizer.param_groups[1].get("lr", None)
+            if len(optimizer.param_groups) > 1
+            else None
+        )
+        if lr_main is not None:
+            self.log(
+                "train_lr",
+                lr_main,
+                on_step=True,
+                on_epoch=False,
+                prog_bar=False,
+                logger=True,
+                sync_dist=False,
+            )
+        if lr_quant is not None:
+            self.log(
+                "train_lr_quant",
+                lr_quant,
+                on_step=True,
+                on_epoch=False,
+                prog_bar=False,
+                logger=True,
+                sync_dist=False,
+            )
+        if wandb.run is not None and self.trainer.is_global_zero:
+            log_dict = {}
+            if lr_main is not None:
+                log_dict["train_lr"] = lr_main
+            if lr_quant is not None:
+                log_dict["train_lr_quant"] = lr_quant
+            if log_dict:
+                wandb.log(log_dict, step=self.global_step)
