@@ -33,15 +33,15 @@ class Hyperparameters:
     num_groups: int = 8
     dropout: float = 0.1
     quantizer_type: str = "ema"
-    beta_start: float = 0.05
-    beta_end: float = 0.25
+    beta_start: float = 0.02
+    beta_end: float = 0.20
     beta_warmup_steps: int = 10_000
     lr: float = 3e-4
     lr_quant: float = 1e-4
     betas: tuple[float, float] = (0.9, 0.99)
     weight_decay: float = 1e-4
     warmup_steps: int = 10_000
-    quantizer_decay: float = 0.985
+    quantizer_decay: float = 0.995
     quantizer_eps: float = 1e-5
 
 
