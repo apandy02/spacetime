@@ -16,19 +16,22 @@ class EMAVectorQuantizer(nn.Module):
     """
     EMA vector quantizer
     """
-
     def __init__(
         self,
         codebook_size: int,
         codebook_dim: int,
         decay: float = 0.95,
         eps: float = 1e-5,
+        dead_code_threshold: float = 0.01,
+        dead_code_noise: float = 1e-4,
     ):
         super().__init__()
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim
         self.decay = decay
         self.eps = eps
+        self.dead_code_threshold = dead_code_threshold
+        self.dead_code_noise = dead_code_noise
 
         embed = torch.randn(codebook_size, codebook_dim)
         self.register_buffer("codebook", embed)
@@ -75,8 +78,30 @@ class EMAVectorQuantizer(nn.Module):
 
                 cluster_size = torch.clamp(cluster_size, min=self.eps)
                 self.codebook.copy_(self.ema_codebook / cluster_size.unsqueeze(1))
+                if self.dead_code_threshold > 0:
+                    self._refresh_dead_codes(cluster_size, n)
 
         return z_q, indices
+
+    def _refresh_dead_codes(self, cluster_size: torch.Tensor, total: torch.Tensor) -> None:
+        """Reinitialize dead codes from active ones to prevent codebook collapse."""
+        avg_cluster = total / self.codebook_size
+        dead = cluster_size < (self.dead_code_threshold * avg_cluster)
+        if not dead.any():
+            return
+        alive = ~dead
+        if not alive.any():
+            return
+        alive_indices = alive.nonzero(as_tuple=False).squeeze(1)
+        rand_idx = alive_indices[
+            torch.randint(0, alive_indices.numel(), (dead.sum().item(),))
+        ]
+        new_codes = self.codebook[rand_idx].clone()
+        if self.dead_code_noise > 0:
+            new_codes.add_(torch.randn_like(new_codes) * self.dead_code_noise)
+        self.ema_cluster_size[dead] = avg_cluster
+        self.ema_codebook[dead] = new_codes * avg_cluster
+        self.codebook[dead] = new_codes
 
 
 class VanillaVectorQuantizer(nn.Module):
