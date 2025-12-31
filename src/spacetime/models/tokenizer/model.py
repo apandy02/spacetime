@@ -132,6 +132,8 @@ class STVQVae(nn.Module):
         quantizer_type: QuantizerType = QuantizerType.EMA,
         quantizer_decay: float = 0.95,
         quantizer_eps: float = 1e-5,
+        dead_code_threshold: float = 0.01,
+        dead_code_noise: float = 1e-4,
     ):
         super(STVQVae, self).__init__()
         self.patch_size = patch_size
@@ -171,7 +173,12 @@ class STVQVae(nn.Module):
         )
         if quantizer_type == QuantizerType.EMA:
             self.vector_quantizer = EMAVectorQuantizer(
-                codebook_size, codebook_dim, decay=quantizer_decay, eps=quantizer_eps
+                codebook_size,
+                codebook_dim,
+                decay=quantizer_decay,
+                eps=quantizer_eps,
+                dead_code_threshold=dead_code_threshold,
+                dead_code_noise=dead_code_noise,
             )
         elif quantizer_type == QuantizerType.VANILLA:
             self.vector_quantizer = VanillaVectorQuantizer(codebook_size, codebook_dim)

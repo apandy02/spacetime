@@ -33,6 +33,8 @@ class STVQVaeModule(L.LightningModule):
         warmup_steps=1_000,
         quantizer_decay=0.985,
         quantizer_eps=1e-5,
+        dead_code_threshold=0.01,
+        dead_code_noise=1e-4,
     ):
         super().__init__()
         self.model = STVQVae(
@@ -52,6 +54,8 @@ class STVQVaeModule(L.LightningModule):
             quantizer_type=quantizer_type,
             quantizer_decay=quantizer_decay,
             quantizer_eps=quantizer_eps,
+            dead_code_threshold=dead_code_threshold,
+            dead_code_noise=dead_code_noise,
         )
         self.quantizer_type = quantizer_type
         self.beta_start = beta_start

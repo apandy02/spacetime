@@ -33,16 +33,18 @@ class Hyperparameters:
     num_groups: int = 8
     dropout: float = 0.1
     quantizer_type: str = "ema"
-    beta_start: float = 0.02
-    beta_end: float = 0.20
+    beta_start: float = 0.05
+    beta_end: float = 0.25
     beta_warmup_steps: int = 10_000
-    lr: float = 3e-4
+    lr: float = 1e-4
     lr_quant: float = 1e-4
     betas: tuple[float, float] = (0.9, 0.99)
     weight_decay: float = 1e-4
-    warmup_steps: int = 10_000
-    quantizer_decay: float = 0.995
+    warmup_steps: int = 20_000
+    quantizer_decay: float = 0.985
     quantizer_eps: float = 1e-5
+    dead_code_threshold: float = 1e-4
+    dead_code_noise: float = 1e-4
 
 
 @dataclass
@@ -137,6 +139,8 @@ def run(cfg: Config) -> None:
         warmup_steps=cfg.hparams.warmup_steps,
         quantizer_decay=cfg.hparams.quantizer_decay,
         quantizer_eps=cfg.hparams.quantizer_eps,
+        dead_code_threshold=cfg.hparams.dead_code_threshold,
+        dead_code_noise=cfg.hparams.dead_code_noise,
     )
 
     logger.info("Initializing trainer (max_epochs=%s, precision=%s)", cfg.max_epochs, cfg.precision)
