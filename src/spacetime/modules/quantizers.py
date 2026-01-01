@@ -48,15 +48,17 @@ class EMAVectorQuantizer(nn.Module):
         Returns:
             z_q: quantized representation of shape [batch_size, frames, n_patches, codebook_dim]
         """
-        z_e_flat = z_e.reshape(-1, self.codebook_dim)
+        z_e_fp32 = z_e.float()
+        z_e_flat = z_e_fp32.reshape(-1, self.codebook_dim)
 
+        codebook_fp32 = self.codebook.float()
         z_sq = (z_e_flat**2).sum(dim=1, keepdim=True)
-        e_sq = (self.codebook**2).sum(dim=1)
-        dist = z_sq + e_sq - 2 * z_e_flat @ self.codebook.t()
+        e_sq = (codebook_fp32**2).sum(dim=1)
+        dist = z_sq + e_sq - 2 * z_e_flat @ codebook_fp32.t()
 
         indices = dist.argmin(dim=1)
-        z_q_flat = self.codebook[indices]
-        z_q = z_q_flat.view_as(z_e)
+        z_q_flat = codebook_fp32[indices]
+        z_q = z_q_flat.view_as(z_e_fp32).to(z_e.dtype)
 
         if self.training:
             with torch.no_grad():

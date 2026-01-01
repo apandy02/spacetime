@@ -114,6 +114,7 @@ def run(cfg: Config) -> None:
             config=cfg.hparams,
         )
 
+    total_steps = cfg.max_epochs * len(train_dataloader)
     lightning_module = STVQVaeModule(
         num_heads=cfg.hparams.num_heads,
         d_model=cfg.hparams.d_model,
@@ -137,6 +138,7 @@ def run(cfg: Config) -> None:
         betas=tuple(cfg.hparams.betas),
         weight_decay=cfg.hparams.weight_decay,
         warmup_steps=cfg.hparams.warmup_steps,
+        total_steps=total_steps,
         quantizer_decay=cfg.hparams.quantizer_decay,
         quantizer_eps=cfg.hparams.quantizer_eps,
         dead_code_threshold=cfg.hparams.dead_code_threshold,
@@ -148,6 +150,7 @@ def run(cfg: Config) -> None:
         max_epochs=cfg.max_epochs,
         precision=cfg.precision,
         strategy="ddp_find_unused_parameters_true",
+        gradient_clip_val=1.0,
     )
     logger.info("Starting fit loop")
     trainer.fit(

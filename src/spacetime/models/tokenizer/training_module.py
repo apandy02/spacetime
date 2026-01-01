@@ -1,3 +1,5 @@
+import math
+
 import lightning as L
 import lpips
 import torch
@@ -31,6 +33,7 @@ class STVQVaeModule(L.LightningModule):
         betas=(0.9, 0.9),
         weight_decay=1e-4,
         warmup_steps=1_000,
+        total_steps: int | None = None,
         quantizer_decay=0.985,
         quantizer_eps=1e-5,
         dead_code_threshold=0.01,
@@ -68,6 +71,7 @@ class STVQVaeModule(L.LightningModule):
         self.betas = betas
         self.weight_decay = weight_decay
         self.warmup_steps = warmup_steps
+        self.total_steps = total_steps
 
         self.lpips_metric = lpips.LPIPS(net="vgg")
         self.lpips_metric.eval()
@@ -104,10 +108,21 @@ class STVQVaeModule(L.LightningModule):
             weight_decay=self.weight_decay,
         )
 
-        def warmup_lambda(step):
-            return min(1.0, (step + 1) / self.warmup_steps)
+        total_steps = self.total_steps
+        if total_steps is None:
+            total_steps = self.warmup_steps
 
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lambda)
+        def warmup_cosine_lambda(step):
+            if self.warmup_steps > 0 and step < self.warmup_steps:
+                return min(1.0, (step + 1) / self.warmup_steps)
+            if total_steps <= self.warmup_steps:
+                return 1.0
+            progress = (step - self.warmup_steps) / (total_steps - self.warmup_steps)
+            return 0.5 * (1.0 + math.cos(math.pi * min(1.0, progress)))
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, lr_lambda=warmup_cosine_lambda
+        )
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
