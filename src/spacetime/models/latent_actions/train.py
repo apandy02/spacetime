@@ -9,11 +9,13 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import UCF101
 
 import wandb
-from spacetime.models.latent_actions.training_module import \
-    LatentActionTrainingModule
-from spacetime.utils import (get_logger, is_rank_zero,
-                             maybe_disable_wandb_for_non_zero_ranks,
-                             maybe_set_wandb_sandbox_key)
+from spacetime.models.latent_actions.training_module import LatentActionTrainingModule
+from spacetime.utils import (
+    get_logger,
+    is_rank_zero,
+    maybe_disable_wandb_for_non_zero_ranks,
+    maybe_set_wandb_sandbox_key,
+)
 
 logger = get_logger("spacetime.latent_actions")
 
@@ -51,7 +53,9 @@ class Hyperparameters:
 @dataclass
 class Config:
     data_root: Path = Path(__file__).resolve().parents[4] / "data/UCF-101-downsized"
-    annotation_path: Path = Path(__file__).resolve().parents[4] / "data/ucfTrainTestlist"
+    annotation_path: Path = (
+        Path(__file__).resolve().parents[4] / "data/ucfTrainTestlist"
+    )
     frames_per_clip: int = 8
     step_between_clips: int = 8
     train_batch_size: int = 16
@@ -69,7 +73,9 @@ def run(cfg: Config) -> None:
     logger.info("Starting latent action training")
     logger.info("Data root: %s", cfg.data_root)
     logger.info("Annotation path: %s", cfg.annotation_path)
-    logger.info("Train/val batch sizes: %s/%s", cfg.train_batch_size, cfg.val_batch_size)
+    logger.info(
+        "Train/val batch sizes: %s/%s", cfg.train_batch_size, cfg.val_batch_size
+    )
 
     train_dataset = UCF101(
         root=str(cfg.data_root),
@@ -132,7 +138,11 @@ def run(cfg: Config) -> None:
 
     wandb.watch(lightning_module, log="gradients", log_freq=100)
 
-    logger.info("Initializing trainer (max_epochs=%s, precision=%s)", cfg.max_epochs, cfg.precision)
+    logger.info(
+        "Initializing trainer (max_epochs=%s, precision=%s)",
+        cfg.max_epochs,
+        cfg.precision,
+    )
     trainer = L.Trainer(
         max_epochs=cfg.max_epochs,
         precision=cfg.precision,

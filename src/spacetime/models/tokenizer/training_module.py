@@ -179,7 +179,9 @@ class STVQVaeModule(L.LightningModule):
         beta = self._current_beta()
         loss = recon_loss + (beta * commit_loss) + codebook_loss
 
-        self._log_losses(loss, recon_loss, commit_loss, codebook_loss, is_training=False)
+        self._log_losses(
+            loss, recon_loss, commit_loss, codebook_loss, is_training=False
+        )
         self._log_codebook_usage(indices, is_training=False)
 
         with torch.no_grad():
@@ -207,7 +209,9 @@ class STVQVaeModule(L.LightningModule):
         self.example_clip = None
         self.example_recon = None
 
-    def _log_losses(self, loss, recon_loss, commit_loss, codebook_loss, is_training=True):
+    def _log_losses(
+        self, loss, recon_loss, commit_loss, codebook_loss, is_training=True
+    ):
         prefix = "train" if is_training else "val"
         log_on_step = True if is_training else False
         log_on_epoch = True

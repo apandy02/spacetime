@@ -3,8 +3,11 @@ from typing import Callable, Optional
 import torch
 import torch.nn as nn
 
-from spacetime.modules.quantizers import (EMAVectorQuantizer, QuantizerType,
-                                          VanillaVectorQuantizer)
+from spacetime.modules.quantizers import (
+    EMAVectorQuantizer,
+    QuantizerType,
+    VanillaVectorQuantizer,
+)
 from spacetime.modules.transformer import STTransformerLayer
 from spacetime.modules.utils import build_causal_mask, patchify, unpatchify
 
@@ -187,9 +190,10 @@ class STVQVae(nn.Module):
 
     def forward(
         self, x: torch.Tensor, return_indices: bool = False
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor] | tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
-    ]:
+    ) -> (
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+    ):
         """
         Forward pass for the STVQVAE.
         """

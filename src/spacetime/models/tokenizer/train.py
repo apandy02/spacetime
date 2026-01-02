@@ -9,9 +9,12 @@ from torch.utils.data import DataLoader, random_split
 import wandb
 from spacetime.models.tokenizer.model import QuantizerType
 from spacetime.models.tokenizer.training_module import STVQVaeModule
-from spacetime.utils import (get_logger, is_rank_zero,
-                             maybe_disable_wandb_for_non_zero_ranks,
-                             maybe_set_wandb_sandbox_key)
+from spacetime.utils import (
+    get_logger,
+    is_rank_zero,
+    maybe_disable_wandb_for_non_zero_ranks,
+    maybe_set_wandb_sandbox_key,
+)
 from spacetime.utils.data import ProcgenShardDataset
 
 logger = get_logger("spacetime.tokenizer")
@@ -34,11 +37,11 @@ class Hyperparameters:
     dropout: float = 0.1
     quantizer_type: str = "ema"
     beta_start: float = 0.05
-    beta_end: float = 0.25
+    beta_end: float = 0.15
     beta_warmup_steps: int = 10_000
     lr: float = 1e-4
     lr_quant: float = 1e-4
-    betas: tuple[float, float] = (0.9, 0.99)
+    betas: tuple[float, float] = (0.9, 0.9)
     weight_decay: float = 1e-4
     warmup_steps: int = 20_000
     quantizer_decay: float = 0.985
@@ -145,7 +148,11 @@ def run(cfg: Config) -> None:
         dead_code_noise=cfg.hparams.dead_code_noise,
     )
 
-    logger.info("Initializing trainer (max_epochs=%s, precision=%s)", cfg.max_epochs, cfg.precision)
+    logger.info(
+        "Initializing trainer (max_epochs=%s, precision=%s)",
+        cfg.max_epochs,
+        cfg.precision,
+    )
     trainer = L.Trainer(
         max_epochs=cfg.max_epochs,
         precision=cfg.precision,

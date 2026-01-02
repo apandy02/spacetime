@@ -16,6 +16,7 @@ class EMAVectorQuantizer(nn.Module):
     """
     EMA vector quantizer
     """
+
     def __init__(
         self,
         codebook_size: int,
@@ -85,7 +86,9 @@ class EMAVectorQuantizer(nn.Module):
 
         return z_q, indices
 
-    def _refresh_dead_codes(self, cluster_size: torch.Tensor, total: torch.Tensor) -> None:
+    def _refresh_dead_codes(
+        self, cluster_size: torch.Tensor, total: torch.Tensor
+    ) -> None:
         """Reinitialize dead codes from active ones to prevent codebook collapse."""
         avg_cluster = total / self.codebook_size
         dead = cluster_size < (self.dead_code_threshold * avg_cluster)
