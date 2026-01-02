@@ -39,7 +39,9 @@ class EMAVectorQuantizer(nn.Module):
         self.register_buffer("ema_cluster_size", torch.zeros(codebook_size))
         self.register_buffer("ema_codebook", embed.clone())
 
-    def forward(self, z_e: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, z_e: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass for the EMAVectorQuantizer.
 
@@ -48,28 +50,34 @@ class EMAVectorQuantizer(nn.Module):
 
         Returns:
             z_q: quantized representation of shape [batch_size, frames, n_patches, codebook_dim]
+            indices: codebook indices of shape [batch_size, frames, n_patches]
+            z_e_normalized: L2-normalized encoder output (same shape as z_e)
         """
         z_e_fp32 = z_e.float()
         z_e_flat = z_e_fp32.reshape(-1, self.codebook_dim)
 
-        codebook_fp32 = self.codebook.float()
-        z_sq = (z_e_flat**2).sum(dim=1, keepdim=True)
-        e_sq = (codebook_fp32**2).sum(dim=1)
-        dist = z_sq + e_sq - 2 * z_e_flat @ codebook_fp32.t()
+        # L2 normalize encoder outputs and codebook for stable quantization
+        z_e_normalized = F.normalize(z_e_flat, dim=-1)
+        codebook_normalized = F.normalize(self.codebook.float(), dim=-1)
+
+        dist = 2 - 2 * (z_e_normalized @ codebook_normalized.t())
 
         indices = dist.argmin(dim=1)
-        z_q_flat = codebook_fp32[indices]
+        z_q_flat = codebook_normalized[indices]
         z_q = z_q_flat.view_as(z_e_fp32).to(z_e.dtype)
+        z_e_norm_out = z_e_normalized.view_as(z_e_fp32).to(z_e.dtype)
 
         if self.training:
             with torch.no_grad():
-                encodings = F.one_hot(indices, self.codebook_size).type(z_e_flat.dtype)
+                encodings = F.one_hot(indices, self.codebook_size).type(
+                    z_e_normalized.dtype
+                )
                 cluster_size = encodings.sum(dim=0)
 
                 self.ema_cluster_size.mul_(self.decay).add_(
                     cluster_size * (1 - self.decay)
                 )
-                codebook_sum = encodings.t() @ z_e_flat
+                codebook_sum = encodings.t() @ z_e_normalized
                 self.ema_codebook.mul_(self.decay).add_(codebook_sum * (1 - self.decay))
 
                 n = self.ema_cluster_size.sum()
@@ -84,7 +92,7 @@ class EMAVectorQuantizer(nn.Module):
                 if self.dead_code_threshold > 0:
                     self._refresh_dead_codes(cluster_size, n)
 
-        return z_q, indices
+        return z_q, indices, z_e_norm_out
 
     def _refresh_dead_codes(
         self, cluster_size: torch.Tensor, total: torch.Tensor
@@ -112,7 +120,7 @@ class EMAVectorQuantizer(nn.Module):
 class VanillaVectorQuantizer(nn.Module):
     """
     Quantize encoded tensor by snapping its elements to the closest codebook entry.
-    Quantizes each patch independently.
+    Quantizes each patch independently. Uses L2 normalization for stable training.
 
     Args:
         codebook_size: number of codebook entries
@@ -120,7 +128,7 @@ class VanillaVectorQuantizer(nn.Module):
 
     Usage:
         quantizer = VanillaVectorQuantizer(codebook_size, codebook_dim)
-        z_q, indices = quantizer(z_e)
+        z_q, indices, z_e_normalized = quantizer(z_e)
     """
 
     def __init__(self, codebook_size: int, codebook_dim: int):
@@ -131,25 +139,34 @@ class VanillaVectorQuantizer(nn.Module):
             torch.randn(codebook_size, codebook_dim) * 0.02, requires_grad=True
         )
 
-    def forward(self, z_e: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, z_e: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Args:
             z_e: encoded representation of shape [batch_size, frames, n_patches, codebook_dim]
         Returns:
             z_q: quantized representation [batch_size, frames, n_patches, codebook_dim]
             indices: indices of closest codebook entries [batch_size, frames, n_patches]
+            z_e_normalized: L2-normalized encoder output (same shape as z_e)
         """
         batch_size, frames, n_patches, codebook_dim = z_e.shape
         assert codebook_dim == self.codebook_dim
 
         encoded = z_e.reshape(-1, codebook_dim)
 
-        z_sq = (encoded**2).sum(dim=1, keepdim=True)
-        e_sq = (self.codebook**2).sum(dim=1)
-        dist = z_sq + e_sq - 2 * encoded @ self.codebook.t()
+        # L2 normalize encoder outputs and codebook for stable quantization
+        z_e_normalized = F.normalize(encoded, dim=-1)
+        codebook_normalized = F.normalize(self.codebook, dim=-1)
+
+        # Distance calculation using normalized vectors (equivalent to cosine distance)
+        dist = 2 - 2 * (z_e_normalized @ codebook_normalized.t())
         indices = dist.argmin(dim=1)
-        z_q = self.codebook[indices].reshape(
+        z_q = codebook_normalized[indices].reshape(
+            batch_size, frames, n_patches, codebook_dim
+        )
+        z_e_norm_out = z_e_normalized.reshape(
             batch_size, frames, n_patches, codebook_dim
         )
         indices = indices.view(batch_size, frames, n_patches)
-        return z_q, indices
+        return z_q, indices, z_e_norm_out

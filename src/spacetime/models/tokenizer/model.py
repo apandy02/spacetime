@@ -199,8 +199,9 @@ class STVQVae(nn.Module):
         """
         x = patchify(x, self.patch_size)  # [B, F, NUM_P, DIM_P]
         x = self.d_model_projection(x)  # [B, F, NUM_P, D_model]
-        z_e = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
-        z_q, indices = self.vector_quantizer(z_e)
+        z_e_raw = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
+        z_q, indices, z_e = self.vector_quantizer(z_e_raw) 
+
         z_q_st = z_e + (z_q - z_e).detach()
         outputs = (
             unpatchify(
