@@ -189,30 +189,27 @@ class STVQVae(nn.Module):
             raise ValueError(f"Invalid quantizer type: {quantizer_type}")
 
     def forward(
-        self, x: torch.Tensor, return_indices: bool = False
-    ) -> (
-        tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-        | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-    ):
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass for the STVQVAE.
+
+        Returns:
+            x_pred: reconstructed input
+            z_e: encoder output (normalized)
+            z_q: quantized representation
+            indices: codebook indices
         """
-        x = patchify(x, self.patch_size)  # [B, F, NUM_P, DIM_P]
-        x = self.d_model_projection(x)  # [B, F, NUM_P, D_model]
+        x = patchify(x, self.patch_size)
+        x = self.d_model_projection(x)
         z_e_raw = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
-        z_q, indices, z_e = self.vector_quantizer(z_e_raw) 
+        z_q, indices, z_e = self.vector_quantizer(z_e_raw)
 
         z_q_st = z_e + (z_q - z_e).detach()
-        outputs = (
-            unpatchify(
-                self.decoder(z_q_st), self.patch_size, self.n_patch_h, self.n_patch_w
-            ),
-            z_e,
-            z_q,
+        x_pred = unpatchify(
+            self.decoder(z_q_st), self.patch_size, self.n_patch_h, self.n_patch_w
         )
-        if return_indices:
-            return outputs + (indices,)
-        return outputs
+        return x_pred, z_e, z_q, indices
 
     def quantizer_factory(self, quantizer_type: QuantizerType) -> nn.Module:
         if quantizer_type == QuantizerType.VANILLA:

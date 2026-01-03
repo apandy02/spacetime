@@ -38,6 +38,7 @@ class STVQVaeModule(L.LightningModule):
         quantizer_eps=1e-5,
         dead_code_threshold=0.01,
         dead_code_noise=1e-4,
+        entropy_weight=0.1,
     ):
         super().__init__()
         self.model = STVQVae(
@@ -72,6 +73,7 @@ class STVQVaeModule(L.LightningModule):
         self.weight_decay = weight_decay
         self.warmup_steps = warmup_steps
         self.total_steps = total_steps
+        self.entropy_weight = entropy_weight
 
         self.lpips_metric = lpips.LPIPS(net="vgg")
         self.lpips_metric.eval()
@@ -134,12 +136,8 @@ class STVQVaeModule(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, _ = batch
-        outputs = self.model(x, return_indices=True)
-        if len(outputs) == 4:
-            x_pred, z_e, z_quantized, indices = outputs
-        else:
-            x_pred, z_e, z_quantized = outputs
-            indices = None
+        x_pred, z_e, z_quantized, indices = self.model(x)
+
         recon_loss = torch.nn.functional.mse_loss(x_pred, x)
         commit_loss = torch.nn.functional.mse_loss(z_e, z_quantized.detach())
         codebook_loss = (
@@ -147,10 +145,21 @@ class STVQVaeModule(L.LightningModule):
             if self.quantizer_type == QuantizerType.VANILLA
             else 0.0
         )
+        entropy_loss = self._compute_entropy_loss(indices) if self.entropy_weight else None
+
         beta = self._current_beta()
         loss = recon_loss + (beta * commit_loss) + codebook_loss
+        if entropy_loss is not None:
+            loss = loss + self.entropy_weight * entropy_loss
 
-        self._log_losses(loss, recon_loss, commit_loss, codebook_loss, is_training=True)
+        losses = {
+            "loss": loss,
+            "recon_loss": recon_loss,
+            "commit_loss": commit_loss,
+            "codebook_loss": codebook_loss if self.quantizer_type == QuantizerType.VANILLA else None,
+            "entropy_loss": entropy_loss,
+        }
+        self._log_losses(losses, is_training=True)
         if wandb.run is not None and self.trainer.is_global_zero:
             wandb.log({"train_beta": beta}, step=self.global_step)
         self._log_codebook_usage(indices, is_training=True)
@@ -163,12 +172,8 @@ class STVQVaeModule(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, _ = batch
-        outputs = self.model(x, return_indices=True)
-        if len(outputs) == 4:
-            x_pred, z_e, z_quantized, indices = outputs
-        else:
-            x_pred, z_e, z_quantized = outputs
-            indices = None
+        x_pred, z_e, z_quantized, indices = self.model(x)
+
         recon_loss = torch.nn.functional.mse_loss(x_pred, x)
         commit_loss = torch.nn.functional.mse_loss(z_e, z_quantized.detach())
         codebook_loss = (
@@ -176,12 +181,21 @@ class STVQVaeModule(L.LightningModule):
             if self.quantizer_type == QuantizerType.VANILLA
             else 0.0
         )
+        entropy_loss = self._compute_entropy_loss(indices) if self.entropy_weight else None
+
         beta = self._current_beta()
         loss = recon_loss + (beta * commit_loss) + codebook_loss
+        if entropy_loss is not None:
+            loss = loss + self.entropy_weight * entropy_loss
 
-        self._log_losses(
-            loss, recon_loss, commit_loss, codebook_loss, is_training=False
-        )
+        losses = {
+            "loss": loss,
+            "recon_loss": recon_loss,
+            "commit_loss": commit_loss,
+            "codebook_loss": codebook_loss if self.quantizer_type == QuantizerType.VANILLA else None,
+            "entropy_loss": entropy_loss,
+        }
+        self._log_losses(losses, is_training=False)
         self._log_codebook_usage(indices, is_training=False)
 
         with torch.no_grad():
@@ -209,59 +223,30 @@ class STVQVaeModule(L.LightningModule):
         self.example_clip = None
         self.example_recon = None
 
-    def _log_losses(
-        self, loss, recon_loss, commit_loss, codebook_loss, is_training=True
-    ):
+    def _log_losses(self, losses: dict[str, torch.Tensor], is_training: bool = True):
+        """
+        Log a dictionary of losses to lightning logger and wandb.
+        """
         prefix = "train" if is_training else "val"
-        log_on_step = True if is_training else False
-        log_on_epoch = True
+        log_on_step = is_training
 
-        self.log(
-            f"{prefix}_loss",
-            loss,
-            on_step=log_on_step,
-            on_epoch=log_on_epoch,
-            prog_bar=True,
-            logger=True,
-            sync_dist=not is_training,
-        )
-        self.log(
-            f"{prefix}_recon_loss",
-            recon_loss,
-            on_step=log_on_step,
-            on_epoch=log_on_epoch,
-            prog_bar=False,
-            logger=True,
-            sync_dist=not is_training,
-        )
-        self.log(
-            f"{prefix}_commit_loss",
-            commit_loss,
-            on_step=log_on_step,
-            on_epoch=log_on_epoch,
-            prog_bar=False,
-            logger=True,
-            sync_dist=not is_training,
-        )
-        if self.quantizer_type == QuantizerType.VANILLA:
+        for name, value in losses.items():
+            if value is None:
+                continue
             self.log(
-                f"{prefix}_codebook_loss",
-                codebook_loss,
+                f"{prefix}_{name}",
+                value,
                 on_step=log_on_step,
-                on_epoch=log_on_epoch,
-                prog_bar=False,
+                on_epoch=True,
+                prog_bar=(name == "loss"),
                 logger=True,
                 sync_dist=not is_training,
             )
 
         if wandb.run is not None and self.trainer.is_global_zero:
             log_dict = {
-                f"{prefix}_loss": loss.item(),
-                f"{prefix}_recon_loss": recon_loss.item(),
-                f"{prefix}_commit_loss": commit_loss.item(),
+                f"{prefix}_{k}": v.item() for k, v in losses.items() if v is not None
             }
-            if self.quantizer_type == QuantizerType.VANILLA:
-                log_dict[f"{prefix}_codebook_loss"] = codebook_loss.item()
             wandb.log(log_dict, step=self.global_step)
 
     def _log_codebook_usage(self, indices, is_training: bool) -> None:
@@ -309,6 +294,21 @@ class STVQVaeModule(L.LightningModule):
             return self.beta_end
         progress = min(1.0, (self.global_step + 1) / self.beta_warmup_steps)
         return self.beta_start + progress * (self.beta_end - self.beta_start)
+
+    def _compute_entropy_loss(self, indices: torch.Tensor) -> torch.Tensor:
+        """
+        Compute normalized entropy loss to encourage diverse codebook usage.
+
+        Returns a value in [0, 1] where 0 means perfect uniform usage
+        and 1 means complete collapse to a single code.
+        """
+        codebook_size = self.model.vector_quantizer.codebook_size
+        flat_indices = indices.reshape(-1)
+        counts = torch.bincount(flat_indices, minlength=codebook_size).float()
+        probs = counts / (counts.sum() + 1e-8)
+        entropy = -(probs * torch.log(probs + 1e-8)).sum()
+        max_entropy = math.log(codebook_size)
+        return (max_entropy - entropy) / max_entropy
 
     def _log_lrs(self) -> None:
         if self.global_step % 50 != 0:

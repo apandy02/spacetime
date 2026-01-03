@@ -39,15 +39,16 @@ class Hyperparameters:
     beta_start: float = 0.05
     beta_end: float = 0.15
     beta_warmup_steps: int = 10_000
-    lr: float = 1e-4
+    lr: float = 3e-4
     lr_quant: float = 1e-4
     betas: tuple[float, float] = (0.9, 0.9)
     weight_decay: float = 1e-4
-    warmup_steps: int = 20_000
+    warmup_steps: int = 10_000
     quantizer_decay: float = 0.985
     quantizer_eps: float = 1e-5
     dead_code_threshold: float = 1e-4
     dead_code_noise: float = 1e-4
+    entropy_weight: float = 0.1
 
 
 @dataclass
@@ -146,6 +147,7 @@ def run(cfg: Config) -> None:
         quantizer_eps=cfg.hparams.quantizer_eps,
         dead_code_threshold=cfg.hparams.dead_code_threshold,
         dead_code_noise=cfg.hparams.dead_code_noise,
+        entropy_weight=cfg.hparams.entropy_weight,
     )
 
     logger.info(
