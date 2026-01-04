@@ -39,6 +39,7 @@ class STVQVaeModule(L.LightningModule):
         dead_code_threshold=0.01,
         dead_code_noise=1e-4,
         entropy_weight=0.1,
+        lpips_weight=0.0,
     ):
         super().__init__()
         self.model = STVQVae(
@@ -74,6 +75,7 @@ class STVQVaeModule(L.LightningModule):
         self.warmup_steps = warmup_steps
         self.total_steps = total_steps
         self.entropy_weight = entropy_weight
+        self.lpips_weight = lpips_weight
 
         self.lpips_metric = lpips.LPIPS(net="vgg")
         self.lpips_metric.eval()
@@ -146,11 +148,14 @@ class STVQVaeModule(L.LightningModule):
             else 0.0
         )
         entropy_loss = self._compute_entropy_loss(indices) if self.entropy_weight else None
+        lpips_loss = self._compute_lpips_loss(x_pred, x) if self.lpips_weight else None
 
         beta = self._current_beta()
         loss = recon_loss + (beta * commit_loss) + codebook_loss
         if entropy_loss is not None:
             loss = loss + self.entropy_weight * entropy_loss
+        if lpips_loss is not None:
+            loss = loss + self.lpips_weight * lpips_loss
 
         losses = {
             "loss": loss,
@@ -158,6 +163,7 @@ class STVQVaeModule(L.LightningModule):
             "commit_loss": commit_loss,
             "codebook_loss": codebook_loss if self.quantizer_type == QuantizerType.VANILLA else None,
             "entropy_loss": entropy_loss,
+            "lpips_loss": lpips_loss,
         }
         self._log_losses(losses, is_training=True)
         if wandb.run is not None and self.trainer.is_global_zero:
@@ -309,6 +315,14 @@ class STVQVaeModule(L.LightningModule):
         entropy = -(probs * torch.log(probs + 1e-8)).sum()
         max_entropy = math.log(codebook_size)
         return (max_entropy - entropy) / max_entropy
+
+    def _compute_lpips_loss(self, x_pred: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """
+        Compute LPIPS perceptual loss between prediction and target.
+        """
+        B, C, F, H, W = x.shape
+        to_lpips = lambda t: ((t * 2.0) - 1.0).reshape(B * F, C, H, W)
+        return self.lpips_metric(to_lpips(x_pred), to_lpips(x)).mean()
 
     def _log_lrs(self) -> None:
         if self.global_step % 50 != 0:
