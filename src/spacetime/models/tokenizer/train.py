@@ -1,12 +1,12 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import lightning as L
 import torch
 import tyro
+from lightning.pytorch.loggers import WandbLogger
 from torch.utils.data import DataLoader, random_split
 
-import wandb
 from spacetime.models.tokenizer.model import QuantizerType
 from spacetime.models.tokenizer.training_module import STVQVaeModule
 from spacetime.utils import (
@@ -101,26 +101,25 @@ def run(cfg: Config) -> None:
         pin_memory=cfg.pin_memory,
     )
 
-    if is_rank_zero():
-        quant_suffix = (
-            f"_ema_d{cfg.hparams.quantizer_decay}"
-            if cfg.hparams.quantizer_type == "ema"
-            else "_vanilla"
-        )
-        lr_suffix = (
-            f"_lr{cfg.hparams.lr}"
-            if cfg.hparams.quantizer_type == "ema"
-            else f"_lr{cfg.hparams.lr}_lq{cfg.hparams.lr_quant}"
-        )
-        name = (
-            f"tokenizer{quant_suffix}_L{cfg.hparams.num_layers}_H{cfg.hparams.num_heads}"
-            f"{lr_suffix}_b{cfg.hparams.beta_start}to{cfg.hparams.beta_end}"
-        )
-        wandb.init(
-            project="genie",
-            name=name,
-            config=cfg.hparams,
-        )
+    quant_suffix = (
+        f"_ema_d{cfg.hparams.quantizer_decay}"
+        if cfg.hparams.quantizer_type == "ema"
+        else "_vanilla"
+    )
+    lr_suffix = (
+        f"_lr{cfg.hparams.lr}"
+        if cfg.hparams.quantizer_type == "ema"
+        else f"_lr{cfg.hparams.lr}_lq{cfg.hparams.lr_quant}"
+    )
+    name = (
+        f"tokenizer{quant_suffix}_L{cfg.hparams.num_layers}_H{cfg.hparams.num_heads}"
+        f"{lr_suffix}_b{cfg.hparams.beta_start}to{cfg.hparams.beta_end}"
+    )
+    wandb_logger = (
+        WandbLogger(project="genie", name=name, config=asdict(cfg.hparams))
+        if is_rank_zero()
+        else False
+    )
 
     total_steps = cfg.max_epochs * len(train_dataloader)
     lightning_module = STVQVaeModule(
@@ -167,6 +166,7 @@ def run(cfg: Config) -> None:
         precision=cfg.precision,
         strategy="ddp_find_unused_parameters_true",
         gradient_clip_val=1.0,
+        logger=wandb_logger,
     )
     logger.info("Starting fit loop")
     trainer.fit(
@@ -176,7 +176,6 @@ def run(cfg: Config) -> None:
         ckpt_path=str(cfg.ckpt_path) if cfg.ckpt_path is not None else None,
     )
 
-    wandb.finish()
     logger.info("Training complete")
 
 
