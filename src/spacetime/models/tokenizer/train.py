@@ -63,6 +63,7 @@ class Config:
     pin_memory: bool = True
     max_epochs: int = 100
     precision: str = "bf16-mixed"
+    ckpt_path: Path | None = None
     hparams: Hyperparameters = Hyperparameters()
 
 
@@ -172,6 +173,7 @@ def run(cfg: Config) -> None:
         model=lightning_module,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
+        ckpt_path=str(cfg.ckpt_path) if cfg.ckpt_path is not None else None,
     )
 
     wandb.finish()
