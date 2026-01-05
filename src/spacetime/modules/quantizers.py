@@ -59,9 +59,9 @@ class EMAVectorQuantizer(nn.Module):
         z_e_normalized = F.normalize(z_e_flat, dim=-1)
         codebook_normalized = F.normalize(self.codebook.to(z_e.dtype), dim=-1)
 
-        dist = 2 - 2 * (z_e_normalized @ codebook_normalized.t())
+        distances = 2 - 2 * (z_e_normalized @ codebook_normalized.t())
 
-        indices = dist.argmin(dim=1)
+        indices = distances.argmin(dim=1)
         z_q_flat = codebook_normalized[indices]
         z_q = z_q_flat.view_as(z_e)
         z_e_norm_out = z_e_normalized.view_as(z_e)
