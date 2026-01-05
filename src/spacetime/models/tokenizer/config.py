@@ -31,7 +31,7 @@ class QuantizerConfig:
     codebook_dim: int = 32
     decay: float = 0.985
     eps: float = 1e-5
-    dead_code_threshold: float = 0.01
+    dead_code_threshold: float = 1e-4
     dead_code_noise: float = 1e-4
 
 
