@@ -1,14 +1,14 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import lightning as L
 import torch
 import torch.nn.functional as F
 import tyro
+from lightning.pytorch.loggers import WandbLogger
 from torch.utils.data import DataLoader
 from torchvision.datasets import UCF101
 
-import wandb
 from spacetime.models.latent_actions.training_module import LatentActionTrainingModule
 from spacetime.utils import (
     get_logger,
@@ -109,15 +109,15 @@ def run(cfg: Config) -> None:
         pin_memory=cfg.pin_memory,
     )
 
-    if is_rank_zero():
-        wandb.init(
-            project="spacetime",
-            name=(
-                f"latent_actions_layers{cfg.hparams.num_layers}_codebook_dim{cfg.hparams.codebook_dim}_"
-                f"actions{cfg.hparams.num_discrete_actions}_heads{cfg.hparams.num_heads}"
-            ),
-            config=cfg.hparams,
-        )
+    name = (
+        f"latent_actions_layers{cfg.hparams.num_layers}_codebook_dim{cfg.hparams.codebook_dim}_"
+        f"actions{cfg.hparams.num_discrete_actions}_heads{cfg.hparams.num_heads}"
+    )
+    wandb_logger = (
+        WandbLogger(project="spacetime", name=name, config=asdict(cfg.hparams))
+        if is_rank_zero()
+        else False
+    )
 
     lightning_module = LatentActionTrainingModule(
         num_heads=cfg.hparams.num_heads,
@@ -136,8 +136,6 @@ def run(cfg: Config) -> None:
         beta=cfg.hparams.beta,
     )
 
-    wandb.watch(lightning_module, log="gradients", log_freq=100)
-
     logger.info(
         "Initializing trainer (max_epochs=%s, precision=%s)",
         cfg.max_epochs,
@@ -147,6 +145,7 @@ def run(cfg: Config) -> None:
         max_epochs=cfg.max_epochs,
         precision=cfg.precision,
         strategy="ddp_find_unused_parameters_true",
+        logger=wandb_logger,
     )
     logger.info("Starting fit loop")
     trainer.fit(
@@ -155,7 +154,6 @@ def run(cfg: Config) -> None:
         val_dataloaders=val_dataloader,
     )
 
-    wandb.finish()
     logger.info("Training complete")
 
 
