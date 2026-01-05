@@ -1,6 +1,7 @@
 from enum import Enum
 
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -53,31 +54,37 @@ class EMAVectorQuantizer(nn.Module):
             indices: codebook indices of shape [batch_size, frames, n_patches]
             z_e_normalized: L2-normalized encoder output (same shape as z_e)
         """
-        z_e_fp32 = z_e.float()
-        z_e_flat = z_e_fp32.reshape(-1, self.codebook_dim)
+        z_e_flat = z_e.reshape(-1, self.codebook_dim)
 
-        # L2 normalize encoder outputs and codebook for stable quantization
         z_e_normalized = F.normalize(z_e_flat, dim=-1)
-        codebook_normalized = F.normalize(self.codebook.float(), dim=-1)
+        codebook_normalized = F.normalize(self.codebook.to(z_e.dtype), dim=-1)
 
         dist = 2 - 2 * (z_e_normalized @ codebook_normalized.t())
 
         indices = dist.argmin(dim=1)
         z_q_flat = codebook_normalized[indices]
-        z_q = z_q_flat.view_as(z_e_fp32).to(z_e.dtype)
-        z_e_norm_out = z_e_normalized.view_as(z_e_fp32).to(z_e.dtype)
+        z_q = z_q_flat.view_as(z_e)
+        z_e_norm_out = z_e_normalized.view_as(z_e)
 
         if self.training:
             with torch.no_grad():
-                encodings = F.one_hot(indices, self.codebook_size).type(
-                    z_e_normalized.dtype
-                )
-                cluster_size = encodings.sum(dim=0)
+                cluster_size = torch.bincount(
+                    indices, minlength=self.codebook_size
+                ).to(z_e_normalized.dtype)
 
+                codebook_sum = torch.zeros(
+                    self.codebook_size,
+                    self.codebook_dim,
+                    device=z_e_normalized.device,
+                    dtype=z_e_normalized.dtype,
+                )
+                codebook_sum.index_add_(0, indices, z_e_normalized)
+                if dist.is_available() and dist.is_initialized():
+                    dist.all_reduce(cluster_size)
+                    dist.all_reduce(codebook_sum)
                 self.ema_cluster_size.mul_(self.decay).add_(
                     cluster_size * (1 - self.decay)
                 )
-                codebook_sum = encodings.t() @ z_e_normalized
                 self.ema_codebook.mul_(self.decay).add_(codebook_sum * (1 - self.decay))
 
                 n = self.ema_cluster_size.sum()
@@ -90,26 +97,36 @@ class EMAVectorQuantizer(nn.Module):
                 cluster_size = torch.clamp(cluster_size, min=self.eps)
                 self.codebook.copy_(self.ema_codebook / cluster_size.unsqueeze(1))
                 if self.dead_code_threshold > 0:
-                    self._refresh_dead_codes(cluster_size, n)
+                    self._refresh_dead_codes(cluster_size, n, z_e_normalized)
 
         return z_q, indices, z_e_norm_out
 
     def _refresh_dead_codes(
-        self, cluster_size: torch.Tensor, total: torch.Tensor
+        self,
+        cluster_size: torch.Tensor,
+        total: torch.Tensor,
+        z_e_flat: torch.Tensor,
     ) -> None:
         """Reinitialize dead codes from active ones to prevent codebook collapse."""
+        if total.item() <= 0:
+            return
         avg_cluster = total / self.codebook_size
         dead = cluster_size < (self.dead_code_threshold * avg_cluster)
         if not dead.any():
             return
-        alive = ~dead
-        if not alive.any():
+        if z_e_flat.numel() == 0:
             return
-        alive_indices = alive.nonzero(as_tuple=False).squeeze(1)
-        rand_idx = alive_indices[
-            torch.randint(0, alive_indices.numel(), (dead.sum().item(),))
-        ]
-        new_codes = self.codebook[rand_idx].clone()
+        num_dead = int(dead.sum().item())
+        z_e_flat = z_e_flat.reshape(-1, self.codebook_dim)
+        if z_e_flat.shape[0] < num_dead:
+            rand_idx = torch.randint(
+                0, z_e_flat.shape[0], (num_dead,), device=z_e_flat.device
+            )
+        else:
+            rand_idx = torch.randperm(z_e_flat.shape[0], device=z_e_flat.device)[
+                :num_dead
+            ]
+        new_codes = z_e_flat[rand_idx].clone()
         if self.dead_code_noise > 0:
             new_codes.add_(torch.randn_like(new_codes) * self.dead_code_noise)
         self.ema_cluster_size[dead] = avg_cluster

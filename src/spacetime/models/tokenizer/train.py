@@ -24,7 +24,7 @@ logger = get_logger("spacetime.tokenizer")
 class Hyperparameters:
     num_heads: int = 8
     d_model: int = 512
-    num_layers: int = 4
+    num_layers: int = 8
     d_linear: int = 1536
     codebook_size: int = 1024
     codebook_dim: int = 32
@@ -37,8 +37,10 @@ class Hyperparameters:
     dropout: float = 0.1
     quantizer_type: str = "ema"
     beta_start: float = 0.05
-    beta_end: float = 0.10
+    beta_end: float = 0.25
     beta_warmup_steps: int = 10_000
+    beta_decay_steps: int = 10_000
+    beta_final: float = 0.01
     lr: float = 3e-4
     lr_quant: float = 1e-4
     betas: tuple[float, float] = (0.9, 0.9)
@@ -46,9 +48,9 @@ class Hyperparameters:
     warmup_steps: int = 10_000
     quantizer_decay: float = 0.985
     quantizer_eps: float = 1e-5
-    dead_code_threshold: float = 1e-4
+    dead_code_threshold: float = 0.01
     dead_code_noise: float = 1e-4
-    entropy_weight: float = 0.5
+    entropy_weight: float = 0.0
     lpips_weight: float = 0.0
 
 
@@ -138,6 +140,8 @@ def run(cfg: Config) -> None:
         beta_start=cfg.hparams.beta_start,
         beta_end=cfg.hparams.beta_end,
         beta_warmup_steps=cfg.hparams.beta_warmup_steps,
+        beta_decay_steps=cfg.hparams.beta_decay_steps,
+        beta_final=cfg.hparams.beta_final,
         lr=cfg.hparams.lr,
         lr_quant=cfg.hparams.lr_quant,
         betas=tuple(cfg.hparams.betas),

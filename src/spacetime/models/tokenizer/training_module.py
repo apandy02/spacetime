@@ -28,6 +28,8 @@ class STVQVaeModule(L.LightningModule):
         beta_start=0.05,
         beta_end=0.35,
         beta_warmup_steps=10_000,
+        beta_decay_steps=10_000,
+        beta_final=0.01,
         lr=3e-4,
         lr_quant=1e-4,
         betas=(0.9, 0.9),
@@ -66,6 +68,8 @@ class STVQVaeModule(L.LightningModule):
         self.beta_start = beta_start
         self.beta_end = beta_end
         self.beta_warmup_steps = beta_warmup_steps
+        self.beta_decay_steps = beta_decay_steps
+        self.beta_final = beta_final
         self.example_clip = None
         self.example_recon = None
         self.lr = lr
@@ -296,10 +300,25 @@ class STVQVaeModule(L.LightningModule):
             )
 
     def _current_beta(self) -> float:
-        if self.beta_warmup_steps <= 0:
+        """
+        Beta schedule: warmup from beta_start to beta_end, then cosine decay to beta_final.
+        """
+        step = self.global_step + 1
+
+        # Phase 1: Warmup (ramp up)
+        if step <= self.beta_warmup_steps:
+            if self.beta_warmup_steps <= 0:
+                return self.beta_end
+            progress = step / self.beta_warmup_steps
+            return self.beta_start + progress * (self.beta_end - self.beta_start)
+
+        # Phase 2: Decay (cosine decay from beta_end to beta_final)
+        if self.beta_decay_steps <= 0:
             return self.beta_end
-        progress = min(1.0, (self.global_step + 1) / self.beta_warmup_steps)
-        return self.beta_start + progress * (self.beta_end - self.beta_start)
+        decay_step = step - self.beta_warmup_steps
+        progress = min(1.0, decay_step / self.beta_decay_steps)
+        cosine_decay = 0.5 * (1.0 + math.cos(math.pi * progress))
+        return self.beta_final + cosine_decay * (self.beta_end - self.beta_final)
 
     def _compute_entropy_loss(self, indices: torch.Tensor) -> torch.Tensor:
         """
