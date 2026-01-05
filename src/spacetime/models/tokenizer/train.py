@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import lightning as L
@@ -7,7 +7,7 @@ import tyro
 from lightning.pytorch.loggers import WandbLogger
 from torch.utils.data import DataLoader, random_split
 
-from spacetime.models.tokenizer.model import QuantizerType
+from spacetime.models.tokenizer.config import Hyperparameters
 from spacetime.models.tokenizer.training_module import STVQVaeModule
 from spacetime.utils import (
     get_logger,
@@ -21,40 +21,6 @@ logger = get_logger("spacetime.tokenizer")
 
 
 @dataclass
-class Hyperparameters:
-    num_heads: int = 8
-    d_model: int = 512
-    num_layers: int = 8
-    d_linear: int = 1536
-    codebook_size: int = 1024
-    codebook_dim: int = 32
-    patch_size: int = 8
-    frame_height: int = 64
-    frame_width: int = 64
-    num_frames: int = 16
-    num_linear_layers: int = 2
-    num_groups: int = 8
-    dropout: float = 0.1
-    quantizer_type: str = "ema"
-    beta_start: float = 0.05
-    beta_end: float = 0.25
-    beta_warmup_steps: int = 10_000
-    beta_decay_steps: int = 10_000
-    beta_final: float = 0.01
-    lr: float = 3e-4
-    lr_quant: float = 1e-4
-    betas: tuple[float, float] = (0.9, 0.9)
-    weight_decay: float = 1e-4
-    warmup_steps: int = 10_000
-    quantizer_decay: float = 0.985
-    quantizer_eps: float = 1e-5
-    dead_code_threshold: float = 0.01
-    dead_code_noise: float = 1e-4
-    entropy_weight: float = 0.0
-    lpips_weight: float = 0.0
-
-
-@dataclass
 class Config:
     shard_dir: Path = Path(__file__).resolve().parents[4] / "data/procgen_heist/shards"
     train_ratio: float = 0.8
@@ -64,10 +30,22 @@ class Config:
     max_epochs: int = 100
     precision: str = "bf16-mixed"
     ckpt_path: Path | None = None
-    hparams: Hyperparameters = Hyperparameters()
+    hparams: Hyperparameters = field(default_factory=Hyperparameters)
 
 
 def run(cfg: Config) -> None:
+    """
+    Run the tokenizer training pipeline.
+    
+    Sets up the Procgen shard dataset, splits into train/val sets, initializes
+    the STVQVae model with configured hyperparameters, and trains using PyTorch
+    Lightning with Weights & Biases logging. Supports DDP training and automatic
+    checkpoint resumption.
+    
+    Args:
+        cfg: Training configuration including hyperparameters, data paths, and
+            training settings.
+    """
     maybe_set_wandb_sandbox_key()
     maybe_disable_wandb_for_non_zero_ranks()
     logger.info("Starting tokenizer training")
@@ -101,60 +79,24 @@ def run(cfg: Config) -> None:
         pin_memory=cfg.pin_memory,
     )
 
-    quant_suffix = (
-        f"_ema_d{cfg.hparams.quantizer_decay}"
-        if cfg.hparams.quantizer_type == "ema"
-        else "_vanilla"
-    )
+    hp = cfg.hparams
+    is_ema = hp.quantizer.type.value == "ema"
+    quant_suffix = f"_ema_d{hp.quantizer.decay}" if is_ema else "_vanilla"
     lr_suffix = (
-        f"_lr{cfg.hparams.lr}"
-        if cfg.hparams.quantizer_type == "ema"
-        else f"_lr{cfg.hparams.lr}_lq{cfg.hparams.lr_quant}"
+        f"_lr{hp.optimizer.lr}" if is_ema else f"_lr{hp.optimizer.lr}_lq{hp.optimizer.lr_quant}"
     )
     name = (
-        f"tokenizer{quant_suffix}_L{cfg.hparams.num_layers}_H{cfg.hparams.num_heads}"
-        f"{lr_suffix}_b{cfg.hparams.beta_start}to{cfg.hparams.beta_end}"
+        f"tokenizer{quant_suffix}_L{hp.model.num_layers}_H{hp.model.num_heads}"
+        f"{lr_suffix}_b{hp.beta.start}to{hp.beta.end}"
     )
     wandb_logger = (
-        WandbLogger(project="genie", name=name, config=asdict(cfg.hparams))
+        WandbLogger(project="genie", name=name, config=asdict(hp))
         if is_rank_zero()
         else False
     )
 
     total_steps = cfg.max_epochs * len(train_dataloader)
-    lightning_module = STVQVaeModule(
-        num_heads=cfg.hparams.num_heads,
-        d_model=cfg.hparams.d_model,
-        num_layers=cfg.hparams.num_layers,
-        d_linear=cfg.hparams.d_linear,
-        codebook_size=cfg.hparams.codebook_size,
-        codebook_dim=cfg.hparams.codebook_dim,
-        patch_size=cfg.hparams.patch_size,
-        frame_height=cfg.hparams.frame_height,
-        frame_width=cfg.hparams.frame_width,
-        num_frames=cfg.hparams.num_frames,
-        num_linear_layers=cfg.hparams.num_linear_layers,
-        num_groups=cfg.hparams.num_groups,
-        dropout=cfg.hparams.dropout,
-        quantizer_type=QuantizerType(cfg.hparams.quantizer_type),
-        beta_start=cfg.hparams.beta_start,
-        beta_end=cfg.hparams.beta_end,
-        beta_warmup_steps=cfg.hparams.beta_warmup_steps,
-        beta_decay_steps=cfg.hparams.beta_decay_steps,
-        beta_final=cfg.hparams.beta_final,
-        lr=cfg.hparams.lr,
-        lr_quant=cfg.hparams.lr_quant,
-        betas=tuple(cfg.hparams.betas),
-        weight_decay=cfg.hparams.weight_decay,
-        warmup_steps=cfg.hparams.warmup_steps,
-        total_steps=total_steps,
-        quantizer_decay=cfg.hparams.quantizer_decay,
-        quantizer_eps=cfg.hparams.quantizer_eps,
-        dead_code_threshold=cfg.hparams.dead_code_threshold,
-        dead_code_noise=cfg.hparams.dead_code_noise,
-        entropy_weight=cfg.hparams.entropy_weight,
-        lpips_weight=cfg.hparams.lpips_weight,
-    )
+    lightning_module = STVQVaeModule(cfg=hp, total_steps=total_steps)
 
     logger.info(
         "Initializing trainer (max_epochs=%s, precision=%s)",
