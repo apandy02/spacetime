@@ -3,6 +3,8 @@ import lpips
 import torch
 
 import wandb
+from lightning.pytorch.loggers import WandbLogger
+
 from spacetime.models.latent_actions.model import LatentActionModel
 
 
@@ -88,24 +90,40 @@ class LatentActionTrainingModule(L.LightningModule):
             to_lpips = lambda t: ((t * 2.0) - 1.0).reshape(B * F, C, H, W)
             lpips_val = self.lpips_metric(to_lpips(x_pred), to_lpips(x)).mean()
         self.log("val_lpips", lpips_val, prog_bar=False, logger=True, sync_dist=True)
-        if wandb.run is not None and self.trainer.is_global_zero:
-            wandb.log({"val_lpips": lpips_val.item()}, step=self.global_step)
         return loss
 
     def on_validation_epoch_end(self):
-        if self.example_clip is None or wandb.run is None:
+        if self.example_clip is None:
             return
+        if not self.trainer.is_global_zero:
+            return
+
         clip = (self.example_clip.clamp(0, 1) * 255).to(torch.uint8)
         recon = (self.example_recon.clamp(0, 1) * 255).to(torch.uint8)
         video = torch.cat([clip, recon], dim=4)
         video = video.squeeze(0).permute(1, 0, 2, 3)  # (F, C, H, W)
-        if wandb.run is not None and self.trainer.is_global_zero:
-            wandb.log(
+
+        # Log video to wandb if available
+        wandb_logger = self._get_wandb_logger()
+        if wandb_logger is not None:
+            wandb_logger.experiment.log(
                 {"recon_video": wandb.Video(video.squeeze(0), fps=4, format="mp4")},
                 step=self.global_step,
             )
         self.example_clip = None
         self.example_recon = None
+
+    def _get_wandb_logger(self) -> WandbLogger | None:
+        """Get WandbLogger from trainer's loggers if available."""
+        if self.trainer.logger is None:
+            return None
+        if isinstance(self.trainer.logger, WandbLogger):
+            return self.trainer.logger
+        if hasattr(self.trainer.logger, "experiment"):
+            for logger in self.trainer.loggers:
+                if isinstance(logger, WandbLogger):
+                    return logger
+        return None
 
     def _log_losses(
         self, loss, recon_loss, codebook_loss, commit_loss, is_training=True
@@ -150,14 +168,3 @@ class LatentActionTrainingModule(L.LightningModule):
             logger=True,
             sync_dist=not is_training,
         )
-
-        if wandb.run is not None and self.trainer.is_global_zero:
-            wandb.log(
-                {
-                    f"{prefix}_loss": loss.item(),
-                    f"{prefix}_recon_loss": recon_loss.item(),
-                    f"{prefix}_codebook_loss": codebook_loss.item(),
-                    f"{prefix}_commit_loss": commit_loss.item(),
-                },
-                step=self.global_step,
-            )

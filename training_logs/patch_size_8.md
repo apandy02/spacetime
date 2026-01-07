@@ -39,10 +39,10 @@
 | E16 (v27) | EMA | 0.05 const | 0.985 | 3e-4 | N/A | 10k | 1e-4 | 0.0 | **8 layers.** Collapsed ~18k. More capacity delayed collapse. |
 | E17 (v28) | EMA | 0.05 const | 0.9 | 3e-4 | 1e-4 | 10k | N/A | 0.0 | **8 layers.** Perplexity 10–24, usage 6–13%. Lower EMA decay delayed collapse. Loss stagnant, reconstructions not great. **Collapsed ~22k.** |
 | E18 (v29) | EMA | 0.25→0.01 (10k) | 0.985 | 3e-4 | N/A | 10k | N/A | N/A | 8 layers. **Collapsed ~10–12k.** β decay didn't help. |
-| **E19** | EMA | 0.05 flat → 0.01 drop | 0.985 | 1e-4 | N/A | 10k | 1e-4 | 0.0 | **BEST RUN — only one that doesn't collapse.** Temp collapse ~70k, recovered. Learned some temporal reasoning (character + movement). |
+| **E19** | EMA | 0.05 flat → 0.01 drop | 0.985 | 1e-4 (cosine anneal) | N/A | 10k | 1e-4 | 0.0 | **BEST RUN — only one that doesn't collapse.** Temp collapse ~70k, recovered. Learned some temporal reasoning (character + movement). |
 | E20 | EMA | 0.05 flat → 0.01 (10k) | 0.985 | 3e-4 | N/A | 10k | 1e-4 | 0.0 | **Collapsed; stopped.** |
 | E21 | EMA | 0.05 flat → 0.01 (10k) | 0.985 | 3e-4 | N/A | 15k | 1e-4 | 0.0 | **Collapsed; stopped.** |
-| **E22** | EMA | 0.05 flat | 0.985 | 1e-4 | N/A | 10k | 1e-4 | 0.0 | **Ongoing; training well.** |
+| **E22** | EMA | 0.05 flat | 0.985 | 1e-4 (cosine anneal) | N/A | 10k | 1e-4 | 0.0 | **Ongoing.** Temp collapse ~55k, recovered but recon loss didn't return to pre-collapse levels. Similar to E19 but earlier temp collapse. |
 
 ---
 
@@ -50,8 +50,29 @@
 
 | Exp ID | Key Config | Status | Notes |
 |--------|------------|--------|-------|
-| **E19** | β: 0.05→0.01 drop, LR: 1e-4 | **Best run** | Only run that didn't collapse. Temp collapse ~70k recovered. Learned temporal reasoning. |
-| **E22** | β: 0.05 flat, LR: 1e-4 | **Ongoing** | Training well. |
+| **E19** | β: 0.05→0.01 drop, LR: 1e-4 (cosine) | **Best run** | Only run that doesn't collapse. Temp collapse ~70k recovered. Learned temporal reasoning. |
+| **E22** | β: 0.05 flat, LR: 1e-4 (cosine) | **Ongoing** | Temp collapse ~55k (earlier than E19). Recovered but didn't match pre-collapse quality. |
+
+### E19 vs E22 Comparison
+- Both use LR 1e-4 with cosine annealing, same warmup (10k), same dead code threshold (1e-4)
+- **E19**: β drops to 0.01 post-warmup → temp collapse at ~70k
+- **E22**: β stays flat at 0.05 → temp collapse at ~55k (earlier)
+- **Hypothesis**: The β drop in E19 may provide additional stability, delaying temp collapse by ~15k steps
+
+---
+
+## Proposed Experiments (3 GPUs available)
+
+| Exp ID | β Schedule | LR | Warmup | Hypothesis |
+|--------|------------|-----|--------|------------|
+| **E23** | 0.05 flat (40k) → 0.01 drop | 1e-4 (cosine) | 10k | Delay β drop to give encoder more time to stabilize before commit pressure reduces |
+| **E24** | 0.05 → 0.01 linear (20k) | 1e-4 (cosine) | 10k | Gradual β decay instead of sudden drop — smoother transition |
+| **E25** | 0.05 flat → 0.01 drop | 5e-5 (cosine) | 10k | Test if even lower LR + β drop provides more stability (LR-β interaction) |
+
+### Rationale
+- **E23 vs E19**: E19 drops β immediately post-warmup (10k). E23 delays to 40k to test if longer flat phase helps.
+- **E24**: Tests whether gradual decay is better than sudden drop
+- **E25**: Tests LR-β interaction — if lower LR compensates for higher β, maybe even lower LR + drop = more stable
 
 ---
 
