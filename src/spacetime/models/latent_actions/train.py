@@ -109,13 +109,11 @@ def run(cfg: Config) -> None:
         pin_memory=cfg.pin_memory,
     )
 
-    name = (
-        f"latent_actions_layers{cfg.hparams.num_layers}_codebook_dim{cfg.hparams.codebook_dim}_"
-        f"actions{cfg.hparams.num_discrete_actions}_heads{cfg.hparams.num_heads}"
-    )
     if is_rank_zero():
-        csv_logger = CSVLogger(save_dir="lightning_logs", name=name)
-        wandb_logger = WandbLogger(project="spacetime", name=name, config=asdict(cfg.hparams))
+        # Let wandb generate a random name, then use its run ID for CSV logger
+        wandb_logger = WandbLogger(project="spacetime", config=asdict(cfg.hparams))
+        run_id = wandb_logger.experiment.id
+        csv_logger = CSVLogger(save_dir="lightning_logs", name=run_id)
         loggers = [csv_logger, wandb_logger]
     else:
         loggers = False
