@@ -5,7 +5,7 @@ import lightning as L
 import torch
 import torch.nn.functional as F
 import tyro
-from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from torch.utils.data import DataLoader
 from torchvision.datasets import UCF101
 
@@ -109,15 +109,14 @@ def run(cfg: Config) -> None:
         pin_memory=cfg.pin_memory,
     )
 
-    name = (
-        f"latent_actions_layers{cfg.hparams.num_layers}_codebook_dim{cfg.hparams.codebook_dim}_"
-        f"actions{cfg.hparams.num_discrete_actions}_heads{cfg.hparams.num_heads}"
-    )
-    wandb_logger = (
-        WandbLogger(project="spacetime", name=name, config=asdict(cfg.hparams))
-        if is_rank_zero()
-        else False
-    )
+    if is_rank_zero():
+        # Let wandb generate a random name, then use its run ID for CSV logger
+        wandb_logger = WandbLogger(project="spacetime", config=asdict(cfg.hparams))
+        run_id = wandb_logger.experiment.id
+        csv_logger = CSVLogger(save_dir="lightning_logs", name=run_id)
+        loggers = [csv_logger, wandb_logger]
+    else:
+        loggers = False
 
     lightning_module = LatentActionTrainingModule(
         num_heads=cfg.hparams.num_heads,
@@ -145,7 +144,7 @@ def run(cfg: Config) -> None:
         max_epochs=cfg.max_epochs,
         precision=cfg.precision,
         strategy="ddp_find_unused_parameters_true",
-        logger=wandb_logger,
+        logger=loggers,
     )
     logger.info("Starting fit loop")
     trainer.fit(

@@ -4,7 +4,7 @@ from pathlib import Path
 import lightning as L
 import torch
 import tyro
-from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from torch.utils.data import DataLoader, random_split
 
 from spacetime.models.tokenizer.config import Hyperparameters
@@ -80,20 +80,14 @@ def run(cfg: Config) -> None:
     )
 
     hp = cfg.hparams
-    is_ema = hp.quantizer.type.value == "ema"
-    quant_suffix = f"_ema_d{hp.quantizer.decay}" if is_ema else "_vanilla"
-    lr_suffix = (
-        f"_lr{hp.optimizer.lr}" if is_ema else f"_lr{hp.optimizer.lr}_lq{hp.optimizer.lr_quant}"
-    )
-    name = (
-        f"tokenizer{quant_suffix}_L{hp.model.num_layers}_H{hp.model.num_heads}"
-        f"{lr_suffix}_b{hp.beta.start}to{hp.beta.end}"
-    )
-    wandb_logger = (
-        WandbLogger(project="genie", name=name, config=asdict(hp))
-        if is_rank_zero()
-        else False
-    )
+    if is_rank_zero():
+        # Let wandb generate a random name, then use its run ID for CSV logger
+        wandb_logger = WandbLogger(project="genie", config=asdict(hp))
+        run_id = wandb_logger.experiment.id
+        csv_logger = CSVLogger(save_dir="lightning_logs", name=run_id, flush_logs_every_n_steps=1)
+        loggers = [csv_logger, wandb_logger]
+    else:
+        loggers = False
 
     total_steps = cfg.max_epochs * len(train_dataloader)
     lightning_module = STVQVaeModule(cfg=hp, total_steps=total_steps)
@@ -108,7 +102,7 @@ def run(cfg: Config) -> None:
         precision=cfg.precision,
         strategy="ddp_find_unused_parameters_true",
         gradient_clip_val=1.0,
-        logger=wandb_logger,
+        logger=loggers,
     )
     logger.info("Starting fit loop")
     trainer.fit(

@@ -5,6 +5,8 @@ import lpips
 import torch
 
 import wandb
+from lightning.pytorch.loggers import WandbLogger
+
 from spacetime.models.tokenizer.config import Hyperparameters
 from spacetime.models.tokenizer.model import STVQVae
 from spacetime.modules.quantizers import QuantizerType
@@ -130,8 +132,7 @@ class STVQVaeModule(L.LightningModule):
         
         self._log_losses(losses, is_training=True)
         beta = self._current_beta()
-        if wandb.run is not None and self.trainer.is_global_zero:
-            wandb.log({"train_beta": beta}, step=self.global_step)
+        self.log("train_beta", beta, on_step=True, on_epoch=False, prog_bar=False, logger=True)
         self._log_codebook_usage(indices, is_training=True)
         self._log_lrs()
 
@@ -176,8 +177,6 @@ class STVQVaeModule(L.LightningModule):
             to_lpips = lambda t: ((t * 2.0) - 1.0).reshape(B * F, C, H, W)
             lpips_val = self.lpips_metric(to_lpips(x_pred), to_lpips(x)).mean()
         self.log("val_lpips", lpips_val, prog_bar=False, logger=True, sync_dist=True)
-        if wandb.run is not None and self.trainer.is_global_zero:
-            wandb.log({"val_lpips": lpips_val.item()}, step=self.global_step)
         return loss
 
     def _compute_losses(
@@ -240,24 +239,43 @@ class STVQVaeModule(L.LightningModule):
         return loss, losses
 
     def on_validation_epoch_end(self):
-        if self.example_clip is None or wandb.run is None:
+        if self.example_clip is None:
             return
+        if not self.trainer.is_global_zero:
+            return
+
         clip = (self.example_clip.clamp(0, 1) * 255).to(torch.uint8)
         recon = (self.example_recon.clamp(0, 1) * 255).to(torch.uint8)
         video = torch.cat([clip, recon], dim=4)
         video = video.squeeze(0).permute(1, 0, 2, 3)  # (F, C, H, W)
-        if wandb.run is not None and self.trainer.is_global_zero:
-            wandb.log(
+
+        # Log video to wandb if available
+        wandb_logger = self._get_wandb_logger()
+        if wandb_logger is not None:
+            wandb_logger.experiment.log(
                 {"recon_video": wandb.Video(video.squeeze(0), fps=4, format="mp4")},
                 step=self.global_step,
             )
         self.example_clip = None
         self.example_recon = None
 
+    def _get_wandb_logger(self) -> WandbLogger | None:
+        """Get WandbLogger from trainer's loggers if available."""
+        if self.trainer.logger is None:
+            return None
+        # Single logger case
+        if isinstance(self.trainer.logger, WandbLogger):
+            return self.trainer.logger
+        # Multiple loggers case
+        if hasattr(self.trainer.logger, "experiment"):
+            # LoggerCollection or similar
+            for logger in self.trainer.loggers:
+                if isinstance(logger, WandbLogger):
+                    return logger
+        return None
+
     def _log_losses(self, losses: dict[str, torch.Tensor], is_training: bool = True):
-        """
-        Log a dictionary of losses to lightning logger and wandb.
-        """
+        """Log a dictionary of losses to all configured loggers."""
         prefix = "train" if is_training else "val"
         log_on_step = is_training
 
@@ -273,12 +291,6 @@ class STVQVaeModule(L.LightningModule):
                 logger=True,
                 sync_dist=not is_training,
             )
-
-        if wandb.run is not None and self.trainer.is_global_zero:
-            log_dict = {
-                f"{prefix}_{k}": v.item() for k, v in losses.items() if v is not None
-            }
-            wandb.log(log_dict, step=self.global_step)
 
     def _log_codebook_usage(self, indices, is_training: bool) -> None:
         if indices is None:
@@ -310,15 +322,6 @@ class STVQVaeModule(L.LightningModule):
             logger=True,
             sync_dist=not is_training,
         )
-
-        if wandb.run is not None and self.trainer.is_global_zero:
-            wandb.log(
-                {
-                    f"{prefix}_codebook_usage": usage.item(),
-                    f"{prefix}_codebook_perplexity": perplexity.item(),
-                },
-                step=self.global_step,
-            )
 
     def _current_beta(self) -> float:
         """
@@ -404,11 +407,3 @@ class STVQVaeModule(L.LightningModule):
                 logger=True,
                 sync_dist=False,
             )
-        if wandb.run is not None and self.trainer.is_global_zero:
-            log_dict = {}
-            if lr_main is not None:
-                log_dict["train_lr"] = lr_main
-            if lr_quant is not None:
-                log_dict["train_lr_quant"] = lr_quant
-            if log_dict:
-                wandb.log(log_dict, step=self.global_step)
