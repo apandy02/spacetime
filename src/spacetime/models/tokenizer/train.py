@@ -81,7 +81,6 @@ def run(cfg: Config) -> None:
 
     hp = cfg.hparams
     if is_rank_zero():
-        # Let wandb generate a random name, then use its run ID for CSV logger
         wandb_logger = WandbLogger(project="genie", config=asdict(hp))
         run_id = wandb_logger.experiment.id
         csv_logger = CSVLogger(save_dir="lightning_logs", name=run_id, flush_logs_every_n_steps=1)
