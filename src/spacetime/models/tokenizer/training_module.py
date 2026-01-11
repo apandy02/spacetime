@@ -45,6 +45,7 @@ class STVQVaeModule(L.LightningModule):
             quantizer_eps=cfg.quantizer.eps,
             dead_code_threshold=cfg.quantizer.dead_code_threshold,
             dead_code_noise=cfg.quantizer.dead_code_noise,
+            gradient_checkpointing=cfg.model.gradient_checkpointing,
         )
         
         self.example_clip = None

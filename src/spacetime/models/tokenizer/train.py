@@ -7,7 +7,7 @@ import tyro
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from torch.utils.data import DataLoader, random_split
 
-from spacetime.models.tokenizer.config import Hyperparameters
+from spacetime.models.tokenizer.config import Hyperparameters, TrainingConfig
 from spacetime.models.tokenizer.training_module import STVQVaeModule
 from spacetime.utils import (
     get_logger,
@@ -24,13 +24,9 @@ logger = get_logger("spacetime.tokenizer")
 class Config:
     shard_dir: Path = Path(__file__).resolve().parents[4] / "data/procgen_heist/shards"
     train_ratio: float = 0.8
-    batch_size: int = 48
-    accumulate_grad_batches: int = 1
     num_workers: int = 8
     pin_memory: bool = True
-    max_epochs: int = 100
-    precision: str = "bf16-mixed"
-    ckpt_path: Path | None = None
+    training: TrainingConfig = field(default_factory=TrainingConfig)
     hparams: Hyperparameters = field(default_factory=Hyperparameters)
 
 
@@ -67,42 +63,48 @@ def run(cfg: Config) -> None:
 
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=cfg.batch_size,
+        batch_size=cfg.training.batch_size,
         shuffle=True,
         num_workers=cfg.num_workers,
         pin_memory=cfg.pin_memory,
     )
     val_dataloader = DataLoader(
         val_dataset,
-        batch_size=cfg.batch_size,
+        batch_size=cfg.training.batch_size,
         shuffle=False,
         num_workers=cfg.num_workers,
         pin_memory=cfg.pin_memory,
     )
 
     hp = cfg.hparams
+    tc = cfg.training
     if is_rank_zero():
-        wandb_logger = WandbLogger(project="genie", config=asdict(hp))
+        wandb_config = {
+            "effective_batch_size": tc.batch_size * tc.accumulate_grad_batches,
+            **asdict(tc),
+            **asdict(hp),
+        }
+        wandb_logger = WandbLogger(project="genie", config=wandb_config)
         run_id = wandb_logger.experiment.id
         csv_logger = CSVLogger(save_dir="lightning_logs", name=run_id, flush_logs_every_n_steps=1)
         loggers = [csv_logger, wandb_logger]
     else:
         loggers = False
 
-    total_steps = cfg.max_epochs * len(train_dataloader)
+    total_steps = tc.max_epochs * len(train_dataloader)
     lightning_module = STVQVaeModule(cfg=hp, total_steps=total_steps)
 
     logger.info(
         "Initializing trainer (max_epochs=%s, precision=%s)",
-        cfg.max_epochs,
-        cfg.precision,
+        tc.max_epochs,
+        tc.precision,
     )
     trainer = L.Trainer(
-        max_epochs=cfg.max_epochs,
-        precision=cfg.precision,
+        max_epochs=tc.max_epochs,
+        precision=tc.precision,
         strategy="ddp_find_unused_parameters_true",
         gradient_clip_val=1.0,
-        accumulate_grad_batches=cfg.accumulate_grad_batches,
+        accumulate_grad_batches=tc.accumulate_grad_batches,
         logger=loggers,
     )
     logger.info("Starting fit loop")
@@ -110,7 +112,7 @@ def run(cfg: Config) -> None:
         model=lightning_module,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
-        ckpt_path=str(cfg.ckpt_path) if cfg.ckpt_path is not None else None,
+        ckpt_path=str(tc.ckpt_path) if tc.ckpt_path is not None else None,
     )
 
     logger.info("Training complete")

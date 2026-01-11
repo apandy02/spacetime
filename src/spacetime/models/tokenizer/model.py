@@ -2,6 +2,7 @@ from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 
 from spacetime.modules.quantizers import (
     EMAVectorQuantizer,
@@ -14,7 +15,7 @@ from spacetime.modules.utils import build_causal_mask, patchify, unpatchify
 
 class VQVAEVideoEncoder(nn.Module):
     """
-    vq vae video encoder
+    VQ-VAE video encoder.
     """
 
     def __init__(
@@ -28,9 +29,11 @@ class VQVAEVideoEncoder(nn.Module):
         num_groups: int = 8,
         dropout: float = 0.1,
         mask: Optional[Callable] = None,
+        gradient_checkpointing: bool = False,
     ):
         super(VQVAEVideoEncoder, self).__init__()
-        self.causal_st_encoder = nn.ModuleList(
+        self.gradient_checkpointing = gradient_checkpointing
+        self.layers = nn.ModuleList(
             [
                 STTransformerLayer(
                     num_heads,
@@ -49,20 +52,20 @@ class VQVAEVideoEncoder(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass for the VQVAEVideoEncoder.
-        inputs [B,T,N,D_model] -> causal encoder -> layer norm -> linear projection -> outputs [B,T,N,D_codebook]
+        [B,T,N,D_model] -> encoder -> layer norm -> projection -> [B,T,N,D_codebook]
         """
-        for layer in self.causal_st_encoder:
-            x = layer(x)
+        for layer in self.layers:
+            if self.gradient_checkpointing and self.training:
+                x = checkpoint(layer, x, use_reentrant=False)
+            else:
+                x = layer(x)
 
-        x = self.layer_norm(x)
-        x = self.codebook_projector(x)
-        return x
+        return self.codebook_projector(self.layer_norm(x))
 
 
 class VQVAEVideoDecoder(nn.Module):
     """
-    vq vae video decoder
+    VQ-VAE video decoder.
     """
 
     def __init__(
@@ -77,10 +80,12 @@ class VQVAEVideoDecoder(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
+        gradient_checkpointing: bool = False,
     ):
         super(VQVAEVideoDecoder, self).__init__()
-        self.d_model_projection = nn.Linear(codebook_dim, d_model)
-        self.st_decoder = nn.ModuleList(
+        self.gradient_checkpointing = gradient_checkpointing
+        self.codebook_projection = nn.Linear(codebook_dim, d_model)
+        self.layers = nn.ModuleList(
             [
                 STTransformerLayer(
                     num_heads,
@@ -101,20 +106,21 @@ class VQVAEVideoDecoder(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass for the VQVAEVideoDecoder.
-        inputs [B,T,N,D_codebook] -> linear projection [B,T,N,D_model] -> st decoder -> layer norm -> outputs
+        [B,T,N,D_codebook] -> projection -> decoder -> layer norm -> [B,T,N,patch_pixels]
         """
-        x = self.d_model_projection(x)
-        for layer in self.st_decoder:
-            x = layer(x)
-        x = self.layer_norm(x)
-        x = self.reconstruction_projector(x)
-        return x
+        x = self.codebook_projection(x)
+        for layer in self.layers:
+            if self.gradient_checkpointing and self.training:
+                x = checkpoint(layer, x, use_reentrant=False)
+            else:
+                x = layer(x)
+
+        return self.reconstruction_projector(self.layer_norm(x))
 
 
 class STVQVae(nn.Module):
     """
-    space time vq vae
+    Spatial-temporal VQ-VAE.
     """
 
     def __init__(
@@ -137,6 +143,7 @@ class STVQVae(nn.Module):
         quantizer_eps: float = 1e-5,
         dead_code_threshold: float = 0.01,
         dead_code_noise: float = 1e-4,
+        gradient_checkpointing: bool = False,
     ):
         super(STVQVae, self).__init__()
         self.patch_size = patch_size
@@ -147,7 +154,7 @@ class STVQVae(nn.Module):
         self.n_patch_w = frame_width // patch_size
         self.n_patches = self.n_patch_h * self.n_patch_w
 
-        d_patches = 3 * patch_size * patch_size  # hardcoded for RGB
+        d_patches = 3 * patch_size * patch_size
 
         self.d_model_projection = nn.Linear(d_patches, d_model)
 
@@ -164,6 +171,7 @@ class STVQVae(nn.Module):
             num_groups,
             dropout=dropout,
             mask=build_causal_mask,
+            gradient_checkpointing=gradient_checkpointing,
         )
         self.decoder = VQVAEVideoDecoder(
             num_heads,
@@ -173,6 +181,7 @@ class STVQVae(nn.Module):
             codebook_dim,
             input_image_channels=3,
             patch_size=patch_size,
+            gradient_checkpointing=gradient_checkpointing,
         )
         if quantizer_type == QuantizerType.EMA:
             self.vector_quantizer = EMAVectorQuantizer(

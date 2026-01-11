@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from spacetime.modules.quantizers import QuantizerType
 
@@ -19,6 +20,7 @@ class ModelArchConfig:
     frame_height: int = 64
     frame_width: int = 64
     num_frames: int = 16
+    gradient_checkpointing: bool = False
 
 
 @dataclass
@@ -66,6 +68,18 @@ class LossConfig:
     """
     entropy_weight: float = 0.0
     lpips_weight: float = 0.0
+
+
+@dataclass
+class TrainingConfig:
+    """
+    Training loop settings.
+    """
+    batch_size: int = 48
+    accumulate_grad_batches: int = 1
+    max_epochs: int = 100
+    precision: str = "bf16-mixed"
+    ckpt_path: Path | None = None
 
 
 @dataclass
