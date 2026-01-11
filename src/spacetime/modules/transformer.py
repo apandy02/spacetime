@@ -52,6 +52,7 @@ class Attention(nn.Module):
         num_groups: int = 8,
         d_k: Optional[int] = None,
         mask: Optional[Callable] = None,
+        is_causal: bool = False,
     ):
         """
         Args:
@@ -60,13 +61,15 @@ class Attention(nn.Module):
             num_heads: number of heads
             d_model: number of channels
             num_groups: number of groups for group normalization
-            mask: whether to use a mask
+            mask: callable to build custom attention mask (mutually exclusive with is_causal)
+            is_causal: use causal masking via Flash Attention (faster than explicit mask)
         """
         super(Attention, self).__init__()
-        self.d_k = d_k if d_k is not None else d_model
+        self.d_k = d_k if d_k is not None else d_model // num_heads
         self.num_heads = num_heads
         self.dropout = nn.Dropout(dropout)
         self.mask = mask
+        self.is_causal = is_causal
         self.d_model = d_model
 
         self.query_projection = nn.Linear(d_model, num_heads * self.d_k)
@@ -107,7 +110,7 @@ class Attention(nn.Module):
         )
 
         attn_mask = None
-        if self.mask is not None:
+        if self.mask is not None and not self.is_causal:
             attn_mask = self.mask(q_len, device=q.device, dtype=q.dtype)
 
         output = F.scaled_dot_product_attention(
@@ -115,6 +118,7 @@ class Attention(nn.Module):
             key=k,
             value=v,
             attn_mask=attn_mask,
+            is_causal=self.is_causal,
             dropout_p=self.dropout.p if self.training else 0.0,
         )
         output = self.output_layer(
@@ -148,6 +152,7 @@ class STTransformerLayer(nn.Module):
         num_groups: int = 8,
         dropout: float = 0.1,
         mask: Optional[Callable] = None,
+        is_causal: bool = False,
     ):
         super(STTransformerLayer, self).__init__()
         self.norm1, self.norm2, self.norm3 = (
@@ -156,7 +161,7 @@ class STTransformerLayer(nn.Module):
             nn.LayerNorm(d_model),
         )
         self.mha_space = Attention(dropout, num_heads, d_model, num_groups)
-        self.mha_time = Attention(dropout, num_heads, d_model, num_groups, mask=mask)
+        self.mha_time = Attention(dropout, num_heads, d_model, num_groups, mask=mask, is_causal=is_causal)
         self.mlp = MLP(d_model, d_linear, dropout, num_linear_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

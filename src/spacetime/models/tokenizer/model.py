@@ -1,5 +1,3 @@
-from typing import Callable, Optional
-
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
@@ -10,7 +8,7 @@ from spacetime.modules.quantizers import (
     VanillaVectorQuantizer,
 )
 from spacetime.modules.transformer import STTransformerLayer
-from spacetime.modules.utils import build_causal_mask, patchify, unpatchify
+from spacetime.modules.utils import patchify, unpatchify
 
 
 class VQVAEVideoEncoder(nn.Module):
@@ -28,7 +26,7 @@ class VQVAEVideoEncoder(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
-        mask: Optional[Callable] = None,
+        is_causal: bool = True,
         gradient_checkpointing: bool = False,
     ):
         super(VQVAEVideoEncoder, self).__init__()
@@ -42,7 +40,7 @@ class VQVAEVideoEncoder(nn.Module):
                     num_linear_layers,
                     num_groups,
                     dropout,
-                    mask=mask,
+                    is_causal=is_causal,
                 )
                 for _ in range(num_layers)
             ]
@@ -170,7 +168,7 @@ class STVQVae(nn.Module):
             num_linear_layers,
             num_groups,
             dropout=dropout,
-            mask=build_causal_mask,
+            is_causal=True,
             gradient_checkpointing=gradient_checkpointing,
         )
         self.decoder = VQVAEVideoDecoder(

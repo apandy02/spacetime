@@ -102,7 +102,7 @@ def run(cfg: Config) -> None:
     trainer = L.Trainer(
         max_epochs=tc.max_epochs,
         precision=tc.precision,
-        strategy="ddp_find_unused_parameters_true",
+        strategy="auto",
         gradient_clip_val=1.0,
         accumulate_grad_batches=tc.accumulate_grad_batches,
         logger=loggers,
