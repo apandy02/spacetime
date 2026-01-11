@@ -7,5 +7,5 @@
 **/lightning_logs/
 **/lightning_logs/**
 **.ckpt
-agents.md
+AGENTS.md
 CLAUDE.md
