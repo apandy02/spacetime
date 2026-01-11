@@ -25,6 +25,7 @@ class Config:
     shard_dir: Path = Path(__file__).resolve().parents[4] / "data/procgen_heist/shards"
     train_ratio: float = 0.8
     batch_size: int = 48
+    accumulate_grad_batches: int = 1
     num_workers: int = 8
     pin_memory: bool = True
     max_epochs: int = 100
@@ -101,6 +102,7 @@ def run(cfg: Config) -> None:
         precision=cfg.precision,
         strategy="ddp_find_unused_parameters_true",
         gradient_clip_val=1.0,
+        accumulate_grad_batches=cfg.accumulate_grad_batches,
         logger=loggers,
     )
     logger.info("Starting fit loop")

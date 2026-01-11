@@ -46,12 +46,12 @@ Tokenizer trained on procgen heist dataset generated using `scripts/gen_procgen_
 | E21 | EMA | 0.05→0.01 (10k) | 0.985 | 3e-4 | 15k | 1e-4 | 0.0 | | | | **Collapsed; stopped.** |
 | E22 (v35) | EMA | 0.05 flat | 0.985 | 1e-4 | 10k | 1e-4 | 0.0 | 0.033 | 0.00059 | 26h 39m | Temp collapse ~55k. **Stopped.** |
 | E23 | EMA | 0.05 flat (40k) → 0.01 | 0.985 | 1e-4 | 10k | 1e-4 | 0.0 | 0.025 | 0.00046 | | Delayed β drop didn't help. **Stopped @ 67k.** |
-| E24 | EMA | 0.05→0.01 (20k decay) | 0.985 | 1e-4 | 10k | 1e-4 | 0.0 | 0.021 | 0.00039 | 34h 23m | Gradual decay working well. **Ongoing.** |
-| **E25** | EMA | 0.05→0.01 drop | 0.985 | **5e-5** | 10k | 1e-4 | 0.0 | **0.016** | **0.00034** | 52h 50m* | **New best.** Lower LR wins. **Ongoing.** |
-| **E26** | EMA | 0.05→0.01 drop | 0.985 | **2.5e-5** | 10k | 1e-4 | 0.0 | | | 53h 48m* | Even lower LR. **Ongoing.** |
-| **E27** | EMA | 0.05→0.01 (20k decay) | 0.985 | **5e-5** | 10k | 1e-4 | 0.0 | | | 23h 31m* | Best LR + gradual decay. **Ongoing.** |
+| E24 | EMA | 0.05→0.01 (20k decay) | 0.985 | 1e-4 | 10k | 1e-4 | 0.0 | 0.021 | 0.00039 | 54h | Gradual decay works. Completed 100 epochs. |
+| **E25** | EMA | 0.05→0.01 drop | 0.985 | **5e-5** | 10k | 1e-4 | 0.0 | **0.014** | **0.00030** | 53h | **NEW BEST.** Completed 100 epochs. |
+| **E26** | EMA | 0.05→0.01 drop | 0.985 | **2.5e-5** | 10k | 1e-4 | 0.0 | 0.038* | 0.00073* | 36h* | Even lower LR. Epoch 67. **Ongoing.** |
+| **E27** | EMA | 0.05→0.01 (20k decay) | 0.985 | **5e-5** | 10k | 1e-4 | 0.0 | 0.018* | 0.00036* | 36h* | Best LR + gradual decay. Epoch 67. **Ongoing.** |
 
-*Duration with asterisk (*) indicates run is still ongoing.
+*Asterisk (*) indicates run is still ongoing; metrics shown are current values, not final.
 
 ---
 
@@ -59,19 +59,19 @@ Tokenizer trained on procgen heist dataset generated using `scripts/gen_procgen_
 
 | Exp ID | Key Config | Min Val LPIPS | Min Val Recon | Duration | Status | Notes |
 |--------|------------|---------------|---------------|----------|--------|-------|
-| **E25** | β: 0.05→0.01 drop, **LR: 5e-5** | **0.016** | **0.00034** | 52h 50m* | **Ongoing** | New best ~30% better LPIPS than E19. |
-| **E26** | β: 0.05→0.01 drop, **LR: 2.5e-5** | | | 53h 48m* | **Ongoing** | Even lower LR experiment. |
-| **E27** | β: 0.05→0.01 (20k decay), **LR: 5e-5** | | | 23h 31m* | **Ongoing** | Best LR + gradual decay. |
-| E24 | β: 0.05→0.01 (20k decay), LR: 1e-4 | 0.021 | 0.00039 | 34h 23m | **Ongoing** | Gradual decay also working well. |
-| E19 (v30) | β: 0.05→0.01 drop, LR: 1e-4 | 0.023 | 0.00043 | 21h 8m | Completed | Previous best. |
+| **E25** | β: 0.05→0.01 drop, **LR: 5e-5** | **0.014** | **0.00030** | 53h | **Completed** | **NEW BEST!** ~40% better LPIPS than E19. |
+| **E27** | β: 0.05→0.01 (20k decay), **LR: 5e-5** | 0.018* | 0.00036* | 36h* | **Ongoing** | On track to match E25. Epoch 67. |
+| **E26** | β: 0.05→0.01 drop, **LR: 2.5e-5** | 0.038* | 0.00073* | 36h* | **Ongoing** | Slower convergence than 5e-5. Epoch 67. |
+| E24 | β: 0.05→0.01 (20k decay), LR: 1e-4 | 0.021 | 0.00039 | 54h | Completed | Gradual decay works, but higher LR limits quality. |
+| E19 (v30) | β: 0.05→0.01 drop, LR: 1e-4 | 0.023 | 0.00043 | 21h 8m | Completed | Previous best before LR discoveries. |
 
 ---
 
-## Key Findings (Updated)
+## Key Findings (Updated Jan 10)
 
 1. **Codebook collapse** is the primary failure mode across almost all experiments
-2. **Lower learning rate is critical** — 5e-5 >> 1e-4 >> 3e-4 for stability and quality
-3. **Beta schedule:** Flat low β (0.05) with drop to 0.01 works; timing (immediate vs gradual) matters less than LR
+2. **LR 5e-5 is optimal** — E25 achieved best results (LPIPS 0.014). LR 2.5e-5 converges slower. LR 1e-4+ prone to instability.
+3. **Beta schedule:** Flat low β (0.05) with drop to 0.01 works; immediate drop slightly better than gradual
 4. **EMA decay:** Standard 0.985 works best
 5. **Dead code refresh:** Improved metrics dramatically but didn't prevent collapse alone
 6. **L2 normalization:** Caused angular collapse on unit sphere
@@ -79,3 +79,4 @@ Tokenizer trained on procgen heist dataset generated using `scripts/gen_procgen_
 8. **LPIPS loss:** Accelerated collapse significantly
 9. **Increased capacity (8 layers):** Delayed collapse but didn't prevent it alone
 10. **LR-β interaction:** Lower LR allows more aggressive β schedules to work
+11. **Best config (E25):** LR 5e-5, β 0.05→0.01 immediate drop, 100 epochs → LPIPS 0.014, Recon 0.00030
