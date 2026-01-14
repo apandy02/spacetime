@@ -30,23 +30,16 @@ class Config:
     hparams: Hyperparameters = field(default_factory=Hyperparameters)
 
 
-def run(cfg: Config) -> None:
+def create_dataloaders(cfg: Config) -> tuple[DataLoader, DataLoader]:
     """
-    Run the tokenizer training pipeline.
-    
-    Sets up the Procgen shard dataset, splits into train/val sets, initializes
-    the STVQVae model with configured hyperparameters, and trains using PyTorch
-    Lightning with Weights & Biases logging. Supports DDP training and automatic
-    checkpoint resumption.
-    
-    Args:
-        cfg: Training configuration including hyperparameters, data paths, and
-            training settings.
-    """
-    maybe_set_wandb_sandbox_key()
-    maybe_disable_wandb_for_non_zero_ranks()
-    logger.info("Starting tokenizer training")
+    Load dataset, split into train/val, and create dataloaders.
 
+    Args:
+        cfg: Training configuration with shard_dir, train_ratio, and dataloader settings.
+
+    Returns:
+        Tuple of (train_dataloader, val_dataloader).
+    """
     shard_dir = cfg.shard_dir
     shard_dir.mkdir(parents=True, exist_ok=True)
     logger.info("loading sharded procgen dataset")
@@ -75,7 +68,13 @@ def run(cfg: Config) -> None:
         num_workers=cfg.num_workers,
         pin_memory=cfg.pin_memory,
     )
+    return train_dataloader, val_dataloader
 
+
+def setup_loggers(cfg: Config) -> list | bool:
+    """
+    Configure WandB and CSV loggers for rank-zero process.
+    """
     hp = cfg.hparams
     tc = cfg.training
     if is_rank_zero():
@@ -87,12 +86,33 @@ def run(cfg: Config) -> None:
         wandb_logger = WandbLogger(project="genie", config=wandb_config)
         run_id = wandb_logger.experiment.id
         csv_logger = CSVLogger(save_dir="lightning_logs", name=run_id, flush_logs_every_n_steps=1)
-        loggers = [csv_logger, wandb_logger]
-    else:
-        loggers = False
+        return [csv_logger, wandb_logger]
+    return False
 
+
+def run(cfg: Config) -> None:
+    """
+    Run the tokenizer training pipeline.
+
+    Orchestrates data loading, logger setup, model initialization, and training
+    using PyTorch Lightning with Weights & Biases logging.
+
+    Args:
+        cfg: Training configuration including hyperparameters, data paths, and
+            training settings.
+    """
+    maybe_set_wandb_sandbox_key()
+    maybe_disable_wandb_for_non_zero_ranks()
+    logger.info("Starting tokenizer training")
+
+    train_dataloader, val_dataloader = create_dataloaders(cfg)
+    loggers = setup_loggers(cfg)
+
+    tc = cfg.training
     total_steps = tc.max_epochs * len(train_dataloader)
-    lightning_module = STVQVaeModule(cfg=hp, total_steps=total_steps)
+    lightning_module = STVQVaeModule(cfg=cfg.hparams, total_steps=total_steps)
+    if tc.compile_model:
+        lightning_module.model = torch.compile(lightning_module.model)
 
     logger.info(
         "Initializing trainer (max_epochs=%s, precision=%s)",

@@ -80,6 +80,7 @@ class TrainingConfig:
     max_epochs: int = 100
     precision: str = "bf16-mixed"
     ckpt_path: Path | None = None
+    compile_model: bool = False
 
 
 @dataclass
