@@ -108,30 +108,24 @@ class EMAVectorQuantizer(nn.Module):
         z_e_flat: torch.Tensor,
     ) -> None:
         """Reinitialize dead codes from active ones to prevent codebook collapse."""
-        if total.item() <= 0:
-            return
+        z_e_flat = z_e_flat.reshape(-1, self.codebook_dim)
+        total = torch.clamp(total, min=self.eps)
         avg_cluster = total / self.codebook_size
         dead = cluster_size < (self.dead_code_threshold * avg_cluster)
-        if not dead.any():
-            return
-        if z_e_flat.numel() == 0:
-            return
-        num_dead = int(dead.sum().item())
-        z_e_flat = z_e_flat.reshape(-1, self.codebook_dim)
-        if z_e_flat.shape[0] < num_dead:
-            rand_idx = torch.randint(
-                0, z_e_flat.shape[0], (num_dead,), device=z_e_flat.device
-            )
-        else:
-            rand_idx = torch.randperm(z_e_flat.shape[0], device=z_e_flat.device)[
-                :num_dead
-            ]
+        rand_idx = torch.randint(
+            0, z_e_flat.shape[0], (self.codebook_size,), device=z_e_flat.device
+        )
         new_codes = z_e_flat[rand_idx].clone()
         if self.dead_code_noise > 0:
-            new_codes.add_(torch.randn_like(new_codes) * self.dead_code_noise)
-        self.ema_cluster_size[dead] = avg_cluster
-        self.ema_codebook[dead] = new_codes * avg_cluster
-        self.codebook[dead] = new_codes
+            new_codes = new_codes + torch.randn_like(new_codes) * self.dead_code_noise
+        dead_mask = dead.unsqueeze(1)
+        self.ema_cluster_size.copy_(
+            torch.where(dead, avg_cluster, self.ema_cluster_size)
+        )
+        self.ema_codebook.copy_(
+            torch.where(dead_mask, new_codes * avg_cluster, self.ema_codebook)
+        )
+        self.codebook.copy_(torch.where(dead_mask, new_codes, self.codebook))
 
 
 class VanillaVectorQuantizer(nn.Module):

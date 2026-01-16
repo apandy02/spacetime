@@ -112,7 +112,9 @@ def run(cfg: Config) -> None:
     total_steps = tc.max_epochs * len(train_dataloader)
     lightning_module = STVQVaeModule(cfg=cfg.hparams, total_steps=total_steps)
     if tc.compile_model:
-        lightning_module.model = torch.compile(lightning_module.model)
+        lightning_module.model = torch.compile(
+            lightning_module.model, backend=tc.compile_backend, mode=tc.compile_mode
+        )
 
     logger.info(
         "Initializing trainer (max_epochs=%s, precision=%s)",

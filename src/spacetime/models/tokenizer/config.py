@@ -81,6 +81,8 @@ class TrainingConfig:
     precision: str = "bf16-mixed"
     ckpt_path: Path | None = None
     compile_model: bool = False
+    compile_backend: str = "inductor"
+    compile_mode: str = "default"
 
 
 @dataclass
