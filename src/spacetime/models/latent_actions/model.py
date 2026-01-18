@@ -3,18 +3,11 @@ from torch import nn
 
 from spacetime.models.genie.config import LamConfig
 from spacetime.models.tokenizer.model import VQVAEVideoEncoder
-from spacetime.modules.quantizers import (
-    EMAVectorQuantizer,
-    QuantizerType,
-    VanillaVectorQuantizer,
-)
+from spacetime.modules.quantizers import (EMAVectorQuantizer, QuantizerType,
+                                          VanillaVectorQuantizer)
 from spacetime.modules.transformer import STTransformerLayer
-from spacetime.modules.utils import (
-    build_anti_causal_mask,
-    build_causal_mask,
-    patchify,
-    unpatchify,
-)
+from spacetime.modules.utils import (build_anti_causal_mask, build_causal_mask,
+                                     patchify, unpatchify)
 
 
 class LatentActionModel(nn.Module):
@@ -39,12 +32,8 @@ class LatentActionModel(nn.Module):
 
         self.d_model_projection = nn.Linear(d_patches, lam_cfg.d_model)
 
-        self.pos_embed_space = nn.Parameter(
-            torch.zeros(1, 1, self.n_patches, lam_cfg.d_model)
-        )
-        self.pos_embed_time = nn.Parameter(
-            torch.zeros(1, self.num_frames, 1, lam_cfg.d_model)
-        )
+        self.pos_embed_space = nn.Parameter(torch.zeros(1, 1, self.n_patches, lam_cfg.d_model))
+        self.pos_embed_time = nn.Parameter(torch.zeros(1, self.num_frames, 1, lam_cfg.d_model))
 
         self.anti_causal_encoder = VQVAEVideoEncoder(
             num_heads=lam_cfg.num_heads,
@@ -87,9 +76,7 @@ class LatentActionModel(nn.Module):
             dropout=lam_cfg.dropout,
         )
 
-    def forward(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass for the LatentActionModel (VAE with quantized latent actions).
         Takes as input:
@@ -113,9 +100,7 @@ class LatentActionModel(nn.Module):
             self.pos_embed_time,
         )
         return (
-            unpatchify(
-                frame_reconstructions, self.patch_size, self.n_patch_h, self.n_patch_w
-            ),
+            unpatchify(frame_reconstructions, self.patch_size, self.n_patch_h, self.n_patch_w),
             z_e,
             action_codes,
         )

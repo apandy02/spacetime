@@ -9,6 +9,7 @@ class ModelArchConfig:
     """
     Transformer and patch embedding architecture.
     """
+
     num_heads: int = 8
     d_model: int = 512
     num_layers: int = 8
@@ -28,6 +29,7 @@ class QuantizerConfig:
     """
     Vector quantization settings.
     """
+
     type: QuantizerType = QuantizerType.EMA
     codebook_size: int = 1024
     codebook_dim: int = 32
@@ -42,6 +44,7 @@ class BetaScheduleConfig:
     """
     Commitment loss beta schedule (warmup → peak → decay).
     """
+
     start: float = 0.05
     end: float = 0.25
     final: float = 0.01
@@ -54,6 +57,7 @@ class OptimizerConfig:
     """
     AdamW optimizer and LR scheduler settings.
     """
+
     lr: float = 3e-4
     lr_quant: float = 1e-4
     betas: tuple[float, float] = (0.9, 0.9)
@@ -66,6 +70,7 @@ class LossConfig:
     """
     Auxiliary loss weights.
     """
+
     entropy_weight: float = 0.0
     lpips_weight: float = 0.0
 
@@ -75,6 +80,7 @@ class TrainingConfig:
     """
     Training loop settings.
     """
+
     batch_size: int = 48
     accumulate_grad_batches: int = 1
     max_epochs: int = 100
@@ -89,7 +95,7 @@ class TrainingConfig:
 class TokenizerConfig:
     """
     All model hyperparameters, hierarchically organized.
-    
+
     Groups:
         - model: Transformer architecture
         - quantizer: Vector quantization settings
@@ -97,6 +103,7 @@ class TokenizerConfig:
         - optimizer: AdamW and scheduler settings
         - loss: Auxiliary loss weights
     """
+
     model: ModelArchConfig = field(default_factory=ModelArchConfig)
     quantizer: QuantizerConfig = field(default_factory=QuantizerConfig)
     beta: BetaScheduleConfig = field(default_factory=BetaScheduleConfig)

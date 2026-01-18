@@ -60,11 +60,7 @@ class ProcgenShardDataset(Dataset):
             self._cached_shard_idx = shard_idx
 
         frames = self._cached_frames[local_idx]
-        actions = (
-            self._cached_actions[local_idx]
-            if self._cached_actions is not None
-            else None
-        )
+        actions = self._cached_actions[local_idx] if self._cached_actions is not None else None
 
         frames = torch.from_numpy(frames)
         if self.normalize:

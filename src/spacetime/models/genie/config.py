@@ -9,6 +9,7 @@ class LamConfig:
     """
     Latent action model (LAM) architecture and loss settings.
     """
+
     num_heads: int = 4
     d_model: int = 384
     num_layers: int = 2
@@ -35,6 +36,7 @@ class DynamicsConfig:
     """
     Dynamics model (MaskGIT) architecture settings.
     """
+
     n_heads: int = 8
     d_model: int = 512
     n_layers: int = 6
@@ -50,6 +52,7 @@ class TrainingConfig:
     """
     Training loop and data settings.
     """
+
     shard_dir: Path = Path(__file__).resolve().parents[4] / "data/procgen_heist/shards"
     train_ratio: float = 0.8
     batch_size: int = 16
@@ -64,6 +67,7 @@ class Hyperparameters:
     """
     Model hyperparameters, grouped by subsystem.
     """
+
     lam: LamConfig = field(default_factory=LamConfig)
     dynamics: DynamicsConfig = field(default_factory=DynamicsConfig)
     lambda_reconstruction: float = 0.01
@@ -74,6 +78,7 @@ class Config:
     """
     Top-level experiment config.
     """
+
     training: TrainingConfig = field(default_factory=TrainingConfig)
     hparams: Hyperparameters = field(default_factory=Hyperparameters)
     tokenizer_checkpoint: Path

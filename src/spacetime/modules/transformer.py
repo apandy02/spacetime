@@ -15,15 +15,11 @@ class MLP(nn.Module):
     Class implementation of the position wise MLP
     """
 
-    def __init__(
-        self, d_model: int, d_ff: int, dropout: float, num_layers: int = 2
-    ) -> None:
+    def __init__(self, d_model: int, d_ff: int, dropout: float, num_layers: int = 2) -> None:
         super(MLP, self).__init__()
         self.layers = nn.ModuleList(
             [
-                nn.Sequential(
-                    nn.Linear(d_model if i == 0 else d_ff, d_ff, bias=True), nn.ReLU()
-                )
+                nn.Sequential(nn.Linear(d_model if i == 0 else d_ff, d_ff, bias=True), nn.ReLU())
                 for i in range(num_layers - 1)
             ]
         )
@@ -93,11 +89,7 @@ class Attention(nn.Module):
 
         k_len, q_len, v_len = k.size(1), q.size(1), v.size(1)
 
-        k = (
-            self.key_projection(k)
-            .view(batch_size, k_len, self.num_heads, self.d_k)
-            .transpose(1, 2)
-        )
+        k = self.key_projection(k).view(batch_size, k_len, self.num_heads, self.d_k).transpose(1, 2)
         q = (
             self.query_projection(q)
             .view(batch_size, q_len, self.num_heads, self.d_k)
@@ -121,9 +113,7 @@ class Attention(nn.Module):
             is_causal=self.is_causal,
             dropout_p=self.dropout.p if self.training else 0.0,
         )
-        output = self.output_layer(
-            output.transpose(1, 2).contiguous().view(batch_size, q_len, -1)
-        )
+        output = self.output_layer(output.transpose(1, 2).contiguous().view(batch_size, q_len, -1))
 
         return self.dropout(output) + residual
 
@@ -161,7 +151,9 @@ class STTransformerLayer(nn.Module):
             nn.LayerNorm(d_model),
         )
         self.mha_space = Attention(dropout, num_heads, d_model, num_groups)
-        self.mha_time = Attention(dropout, num_heads, d_model, num_groups, mask=mask, is_causal=is_causal)
+        self.mha_time = Attention(
+            dropout, num_heads, d_model, num_groups, mask=mask, is_causal=is_causal
+        )
         self.mlp = MLP(d_model, d_linear, dropout, num_linear_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

@@ -10,22 +10,16 @@ from procgen import ProcgenEnv
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Generate Procgen Heist clips with action labels."
-    )
+    parser = argparse.ArgumentParser(description="Generate Procgen Heist clips with action labels.")
     parser.add_argument("--clip-len", type=int, default=16, help="Frames per clip.")
-    parser.add_argument(
-        "--num-clips", type=int, default=10000, help="Total clips to generate."
-    )
+    parser.add_argument("--num-clips", type=int, default=10000, help="Total clips to generate.")
     parser.add_argument(
         "--num-transitions",
         type=int,
         default=None,
         help="Total transitions to target (overrides --num-clips).",
     )
-    parser.add_argument(
-        "--num-envs", type=int, default=8, help="Number of parallel envs."
-    )
+    parser.add_argument("--num-envs", type=int, default=8, help="Number of parallel envs.")
     parser.add_argument(
         "--distribution-mode",
         default="hard",
@@ -52,9 +46,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def sample_actions(
-    action_n: int, last_actions: np.ndarray, p_repeat: float
-) -> np.ndarray:
+def sample_actions(action_n: int, last_actions: np.ndarray, p_repeat: float) -> np.ndarray:
     if p_repeat <= 0.0:
         return np.random.randint(0, action_n, size=last_actions.shape[0])
     random_actions = np.random.randint(0, action_n, size=last_actions.shape[0])

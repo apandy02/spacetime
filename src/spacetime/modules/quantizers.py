@@ -40,9 +40,7 @@ class EMAVectorQuantizer(nn.Module):
         self.register_buffer("ema_cluster_size", torch.zeros(codebook_size))
         self.register_buffer("ema_codebook", embed.clone())
 
-    def forward(
-        self, z_e: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, z_e: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass for the EMAVectorQuantizer.
 
@@ -68,9 +66,9 @@ class EMAVectorQuantizer(nn.Module):
 
         if self.training:
             with torch.no_grad():
-                cluster_size = torch.bincount(
-                    indices, minlength=self.codebook_size
-                ).to(z_e_normalized.dtype)
+                cluster_size = torch.bincount(indices, minlength=self.codebook_size).to(
+                    z_e_normalized.dtype
+                )
 
                 codebook_sum = torch.zeros(
                     self.codebook_size,
@@ -82,16 +80,12 @@ class EMAVectorQuantizer(nn.Module):
                 if dist.is_available() and dist.is_initialized():
                     dist.all_reduce(cluster_size)
                     dist.all_reduce(codebook_sum)
-                self.ema_cluster_size.mul_(self.decay).add_(
-                    cluster_size * (1 - self.decay)
-                )
+                self.ema_cluster_size.mul_(self.decay).add_(cluster_size * (1 - self.decay))
                 self.ema_codebook.mul_(self.decay).add_(codebook_sum * (1 - self.decay))
 
                 n = self.ema_cluster_size.sum()
                 cluster_size = (
-                    (self.ema_cluster_size + self.eps)
-                    / (n + self.codebook_size * self.eps)
-                    * n
+                    (self.ema_cluster_size + self.eps) / (n + self.codebook_size * self.eps) * n
                 )
 
                 cluster_size = torch.clamp(cluster_size, min=self.eps)
@@ -119,12 +113,8 @@ class EMAVectorQuantizer(nn.Module):
         if self.dead_code_noise > 0:
             new_codes = new_codes + torch.randn_like(new_codes) * self.dead_code_noise
         dead_mask = dead.unsqueeze(1)
-        self.ema_cluster_size.copy_(
-            torch.where(dead, avg_cluster, self.ema_cluster_size)
-        )
-        self.ema_codebook.copy_(
-            torch.where(dead_mask, new_codes * avg_cluster, self.ema_codebook)
-        )
+        self.ema_cluster_size.copy_(torch.where(dead, avg_cluster, self.ema_cluster_size))
+        self.ema_codebook.copy_(torch.where(dead_mask, new_codes * avg_cluster, self.ema_codebook))
         self.codebook.copy_(torch.where(dead_mask, new_codes, self.codebook))
 
 
@@ -150,9 +140,7 @@ class VanillaVectorQuantizer(nn.Module):
             torch.randn(codebook_size, codebook_dim) * 0.02, requires_grad=True
         )
 
-    def forward(
-        self, z_e: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, z_e: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Args:
             z_e: encoded representation of shape [batch_size, frames, n_patches, codebook_dim]
@@ -173,11 +161,7 @@ class VanillaVectorQuantizer(nn.Module):
         # Distance calculation using normalized vectors (equivalent to cosine distance)
         dist = 2 - 2 * (z_e_normalized @ codebook_normalized.t())
         indices = dist.argmin(dim=1)
-        z_q = codebook_normalized[indices].reshape(
-            batch_size, frames, n_patches, codebook_dim
-        )
-        z_e_norm_out = z_e_normalized.reshape(
-            batch_size, frames, n_patches, codebook_dim
-        )
+        z_q = codebook_normalized[indices].reshape(batch_size, frames, n_patches, codebook_dim)
+        z_e_norm_out = z_e_normalized.reshape(batch_size, frames, n_patches, codebook_dim)
         indices = indices.view(batch_size, frames, n_patches)
         return z_q, indices, z_e_norm_out

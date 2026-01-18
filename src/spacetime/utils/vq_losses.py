@@ -21,9 +21,7 @@ def compute_entropy_loss(indices: torch.Tensor, codebook_size: int) -> torch.Ten
     return (max_entropy - entropy) / max_entropy
 
 
-def compute_lpips_loss(
-    lpips_metric, x_pred: torch.Tensor, x: torch.Tensor
-) -> torch.Tensor:
+def compute_lpips_loss(lpips_metric, x_pred: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
     """
     Compute LPIPS perceptual loss between prediction and target.
     """
@@ -52,21 +50,9 @@ def compute_vq_losses(
     recon_loss = F.mse_loss(x_pred, x)
     commit_loss = F.mse_loss(z_e, z_quantized.detach())
     is_vanilla = quantizer_type == QuantizerType.VANILLA
-    codebook_loss = (
-        F.mse_loss(z_quantized, z_e.detach())
-        if is_vanilla
-        else 0.0
-    )
-    entropy_loss = (
-        compute_entropy_loss(indices, codebook_size)
-        if entropy_weight
-        else None
-    )
-    lpips_loss = (
-        compute_lpips_loss(lpips_metric, x_pred, x)
-        if lpips_weight
-        else None
-    )
+    codebook_loss = F.mse_loss(z_quantized, z_e.detach()) if is_vanilla else 0.0
+    entropy_loss = compute_entropy_loss(indices, codebook_size) if entropy_weight else None
+    lpips_loss = compute_lpips_loss(lpips_metric, x_pred, x) if lpips_weight else None
 
     loss = recon_loss + (beta * commit_loss) + codebook_loss
     if entropy_loss is not None:

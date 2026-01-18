@@ -16,7 +16,7 @@ from spacetime.utils.vq_losses import (compute_entropy_loss,
 class VQTokenizerModule(L.LightningModule):
     """
     PyTorch Lightning module for training the spacetime transformer-based VQ-VAE tokenizer.
-    
+
     Args:
         cfg: Hierarchical hyperparameters configuration.
         total_steps: Total training steps for LR scheduler. If None, uses warmup_steps.
@@ -26,9 +26,9 @@ class VQTokenizerModule(L.LightningModule):
         super().__init__()
         self.cfg = cfg
         self.total_steps = total_steps
-        
+
         self.model = VQTokenizer(cfg)
-        
+
         self.example_clip = None
         self.example_recon = None
 
@@ -80,9 +80,7 @@ class VQTokenizerModule(L.LightningModule):
             progress = (step - opt_cfg.warmup_steps) / (total_steps - opt_cfg.warmup_steps)
             return 0.5 * (1.0 + math.cos(math.pi * min(1.0, progress)))
 
-        scheduler = torch.optim.lr_scheduler.LambdaLR(
-            optimizer, lr_lambda=warmup_cosine_lambda
-        )
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_cosine_lambda)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
@@ -95,15 +93,15 @@ class VQTokenizerModule(L.LightningModule):
     def training_step(self, batch, batch_idx):
         """
         Execute a single training step.
-        
+
         Performs forward pass, computes all losses (reconstruction, commitment,
         codebook, entropy, LPIPS), logs metrics to W&B and Lightning, and stores
         example frames for visualization.
-        
+
         Args:
             batch: Tuple of (frames, labels) where frames is the input video clip.
             batch_idx: Index of the current batch in the epoch.
-            
+
         Returns:
             Total weighted loss tensor for backpropagation.
         """
@@ -123,7 +121,7 @@ class VQTokenizerModule(L.LightningModule):
             lpips_weight=self.cfg.loss.lpips_weight,
             lpips_metric=self.lpips_metric,
         )
-        
+
         self._log_losses(losses, is_training=True)
         beta = self._current_beta()
         self.log("train_beta", beta, on_step=True, on_epoch=False, prog_bar=False, logger=True)
@@ -143,9 +141,7 @@ class VQTokenizerModule(L.LightningModule):
         commit_loss = torch.nn.functional.mse_loss(z_e, z_quantized.detach())
         is_vanilla = self.cfg.quantizer.type == QuantizerType.VANILLA
         codebook_loss = (
-            torch.nn.functional.mse_loss(z_quantized, z_e.detach())
-            if is_vanilla
-            else 0.0
+            torch.nn.functional.mse_loss(z_quantized, z_e.detach()) if is_vanilla else 0.0
         )
         loss_cfg = self.cfg.loss
         entropy_loss = (
@@ -275,11 +271,11 @@ class VQTokenizerModule(L.LightningModule):
         # Decay (cosine decay from beta.end to beta.final)
         if beta_cfg.decay_steps <= 0:
             return beta_cfg.end
-        
+
         decay_step = step - beta_cfg.warmup_steps
         progress = min(1.0, decay_step / beta_cfg.decay_steps)
         cosine_decay = 0.5 * (1.0 + math.cos(math.pi * progress))
-        
+
         return beta_cfg.final + cosine_decay * (beta_cfg.end - beta_cfg.final)
 
     def _log_lrs(self) -> None:
@@ -292,9 +288,7 @@ class VQTokenizerModule(L.LightningModule):
             return
         lr_main = optimizer.param_groups[0].get("lr", None)
         lr_quant = (
-            optimizer.param_groups[1].get("lr", None)
-            if len(optimizer.param_groups) > 1
-            else None
+            optimizer.param_groups[1].get("lr", None) if len(optimizer.param_groups) > 1 else None
         )
         if lr_main is not None:
             self.log(

@@ -68,9 +68,7 @@ class ResBlock(nn.Module):
         else:
             self.idconv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
 
-        self.avgpool = (
-            nn.Identity() if stride == 1 else nn.AvgPool2d(kernel_size=2, stride=stride)
-        )
+        self.avgpool = nn.Identity() if stride == 1 else nn.AvgPool2d(kernel_size=2, stride=stride)
         self.activation = activation()
         self.dropout = nn.Dropout(dropout)
         self.timestep_emb_dim = timestep_emb_dim

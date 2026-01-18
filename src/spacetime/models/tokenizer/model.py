@@ -39,12 +39,8 @@ class VQTokenizer(nn.Module):
 
         self.d_model_projection = nn.Linear(d_patches, model_cfg.d_model)
 
-        self.pos_embed_space = nn.Parameter(
-            torch.zeros(1, 1, self.n_patches, model_cfg.d_model)
-        )
-        self.pos_embed_time = nn.Parameter(
-            torch.zeros(1, self.num_frames, 1, model_cfg.d_model)
-        )
+        self.pos_embed_space = nn.Parameter(torch.zeros(1, 1, self.n_patches, model_cfg.d_model))
+        self.pos_embed_time = nn.Parameter(torch.zeros(1, self.num_frames, 1, model_cfg.d_model))
 
         self.encoder = VQVAEVideoEncoder(
             model_cfg.num_heads,
@@ -98,15 +94,10 @@ class VQTokenizer(nn.Module):
         """
         z_q, indices, z_e = self.tokenize(x)
         z_q_st = z_e + (z_q - z_e).detach()
-        
-        x_pred = unpatchify(
-            self.decoder(z_q_st), self.patch_size, self.n_patch_h, self.n_patch_w
-        )
+        x_pred = self.decode(z_q_st)
         return x_pred, z_e, z_q, indices
 
-    def tokenize(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def tokenize(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Encode inputs into quantized codebook vectors and indices without decoding.
 
@@ -122,6 +113,19 @@ class VQTokenizer(nn.Module):
         z_e_raw = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
         return self.vector_quantizer(z_e_raw)
 
+    def decode(self, z_q: torch.Tensor) -> torch.Tensor:
+        """
+        Decode quantized codebook vectors into reconstructed frames.
+        """
+        return unpatchify(self.decoder(z_q), self.patch_size, self.n_patch_h, self.n_patch_w)
+
+    def decode_indices(self, indices: torch.Tensor) -> torch.Tensor:
+        """
+        Decode discrete codebook indices into reconstructed frames.
+        """
+        codebook = self.vector_quantizer.codebook
+        z_q = torch.nn.functional.normalize(codebook, dim=-1)[indices]
+        return self.decode(z_q)
 
     def quantizer_factory(self, quantizer_type: QuantizerType) -> nn.Module:
         if quantizer_type == QuantizerType.VANILLA:

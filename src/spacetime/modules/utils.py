@@ -39,9 +39,7 @@ def patchify(x: torch.Tensor, patch_size: int) -> torch.Tensor:
     )
 
 
-def unpatchify(
-    x: torch.Tensor, patch_size: int, n_patch_h: int, n_patch_w: int
-) -> torch.Tensor:
+def unpatchify(x: torch.Tensor, patch_size: int, n_patch_h: int, n_patch_w: int) -> torch.Tensor:
     """
     Unpatches a batch of videos from patches back to full frames.
     Reverses the patchification done by patchify.
@@ -94,8 +92,6 @@ def build_anti_causal_mask(seq_len: int, device=None, dtype=None) -> torch.Tenso
     Anti causal mask for the transformer that allows attention to one token in the future.
     """
     tril = torch.tril(torch.ones(seq_len, seq_len, device=device, dtype=torch.bool))
-    superdiag = torch.diag(
-        torch.ones(seq_len - 1, device=device, dtype=torch.bool), diagonal=1
-    )
+    superdiag = torch.diag(torch.ones(seq_len - 1, device=device, dtype=torch.bool), diagonal=1)
     mask = tril | superdiag
     return ~mask

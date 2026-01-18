@@ -26,7 +26,7 @@ class DynamicsModel(nn.Module):
             tokenizer_cfg (TokenizerConfig): Configuration for the VQTokenizer.
         """
         super(DynamicsModel, self).__init__()
-        
+
         n_heads = dynamics_cfg.n_heads
         d_model = dynamics_cfg.d_model
         n_layers = dynamics_cfg.n_layers
@@ -35,17 +35,18 @@ class DynamicsModel(nn.Module):
         n_groups = dynamics_cfg.n_groups
         dropout = dynamics_cfg.dropout
         p_sample = dynamics_cfg.p_sample
-        
+
         action_codebook_size = lam_cfg.num_discrete_actions
         action_dim = lam_cfg.codebook_dim
         n_frames = lam_cfg.num_frames
-        
+
         token_codebook_size = tokenizer_cfg.quantizer.codebook_size
         token_dim = tokenizer_cfg.quantizer.codebook_dim
-        
-        n_tokens = (tokenizer_cfg.model.frame_height // tokenizer_cfg.model.patch_size) * \
-                   (tokenizer_cfg.model.frame_width // tokenizer_cfg.model.patch_size)
-        
+
+        n_tokens = (tokenizer_cfg.model.frame_height // tokenizer_cfg.model.patch_size) * (
+            tokenizer_cfg.model.frame_width // tokenizer_cfg.model.patch_size
+        )
+
         self.n_tokens = n_tokens
         self.n_frames = n_frames
         self.d_model = d_model
@@ -54,7 +55,7 @@ class DynamicsModel(nn.Module):
         self.action_dim = action_dim
         self.token_codebook_size = token_codebook_size
         self.token_dim = token_dim
-        
+
         self.st_decoder = nn.ModuleList(
             [
                 STTransformerLayer(
@@ -78,6 +79,7 @@ class DynamicsModel(nn.Module):
 
         self.action_projector = nn.Linear(self.action_dim, self.d_model)
         self.token_projector = nn.Linear(self.token_dim, self.d_model)
+        self.output_projector = nn.Linear(self.d_model, self.token_codebook_size)
 
     def forward(self, tokens: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
         """
@@ -94,14 +96,18 @@ class DynamicsModel(nn.Module):
             tokens = layer(tokens)
 
         tokens = self.layer_norm(tokens)
-        return tokens
+        return self.output_projector(tokens)
 
     def _mask(self, tokens: torch.Tensor) -> torch.Tensor:
         """
         Bernoulli masking
         """
         batch_size, n_frames, n_tokens, _ = tokens.shape
-        a = torch.empty((batch_size, n_frames, n_tokens)).uniform_(0, 1)
+        a = torch.empty(
+            (batch_size, n_frames, n_tokens),
+            device=tokens.device,
+            dtype=tokens.dtype,
+        ).uniform_(0, 1)
         mask = a < self.p_sample
         tokens = torch.where(mask[..., None], self.mask_embed, tokens)
         return tokens
