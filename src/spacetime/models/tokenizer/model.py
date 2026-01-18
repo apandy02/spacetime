@@ -1,3 +1,5 @@
+from typing import Callable
+
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
@@ -132,7 +134,7 @@ class VQVAEVideoEncoder(nn.Module):
         num_groups: int = 8,
         dropout: float = 0.1,
         is_causal: bool = True,
-        mask=None,
+        mask: Callable | None = None,
         gradient_checkpointing: bool = False,
     ):
         super(VQVAEVideoEncoder, self).__init__()

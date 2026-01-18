@@ -7,14 +7,21 @@ from lightning.pytorch.loggers import WandbLogger
 
 from spacetime.models.genie.config import Config
 from spacetime.models.latent_actions.model import LatentActionModel
+from spacetime.modules.quantizers import QuantizerType
+from spacetime.utils.vq_losses import compute_lpips_loss, compute_vq_losses
 
 
 class GenieTrainingModule(L.LightningModule):
+    """
+    PyTorch Lightning module for end to end training of the Genie model.
+    Args:
+        cfg: Configuration for the Genie model.
+    """
     def __init__(self, cfg: Config):
         super().__init__()
         self.cfg = cfg
         lam_cfg = cfg.hparams.lam
-        self.model = LatentActionModel(
+        self.latent_action_model = LatentActionModel(
             num_heads=lam_cfg.num_heads,
             d_model=lam_cfg.d_model,
             num_layers=lam_cfg.num_layers,
@@ -29,7 +36,7 @@ class GenieTrainingModule(L.LightningModule):
             num_groups=lam_cfg.num_groups,
             dropout=lam_cfg.dropout,
         )
-        self.beta = lam_cfg.beta
+        self.lam_beta = lam_cfg.beta
         self.example_clip = None
         self.example_recon = None
 
@@ -37,22 +44,43 @@ class GenieTrainingModule(L.LightningModule):
         self.lpips_metric.eval()
         for p in self.lpips_metric.parameters():
             p.requires_grad = False
+        
+        self.dynamics_model = DynamicsModel(
+            dynamics_cfg=self.cfg.hparams.dynamics,
+            lam_cfg=self.cfg.hparams.lam,
+            tokenizer_cfg=self.cfg.hparams.tokenizer,
+        )
 
     def forward(self, inputs):
-        return self.model(inputs)
+        return self.latent_action_model(inputs)
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.model.parameters(), lr=3e-4)
+        return torch.optim.AdamW(self.latent_action_model.parameters(), lr=3e-4)
 
     def training_step(self, batch, batch_idx):
         x, _ = batch
         x_pred, z_e, z_quantized = self(x)
-        recon_loss = torch.nn.functional.mse_loss(x_pred, x)
-        codebook_loss = torch.nn.functional.mse_loss(z_quantized, z_e.detach())
-        commit_loss = torch.nn.functional.mse_loss(z_e, z_quantized.detach())
-        loss = recon_loss + codebook_loss + (self.beta * commit_loss)
+        loss, losses = compute_vq_losses(
+            x_pred,
+            x,
+            z_e,
+            z_quantized,
+            indices=None,
+            beta=self.lam_beta,
+            quantizer_type=QuantizerType.VANILLA,
+            codebook_size=self.latent_action_model.codebook.shape[0],
+            entropy_weight=0.0,
+            lpips_weight=0.0,
+            lpips_metric=self.lpips_metric,
+        )
 
-        self._log_losses(loss, recon_loss, codebook_loss, commit_loss, is_training=True)
+        self._log_losses(
+            loss,
+            losses["recon_loss"],
+            losses["codebook_loss"],
+            losses["commit_loss"],
+            is_training=True,
+        )
 
         if batch_idx == 0:
             self.example_clip = x[:1].detach().cpu()
@@ -62,20 +90,30 @@ class GenieTrainingModule(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, _ = batch
         x_pred, z_e, z_quantized = self(x)
-        recon_loss = torch.nn.functional.mse_loss(x_pred, x)
-        codebook_loss = torch.nn.functional.mse_loss(z_quantized, z_e.detach())
-        commit_loss = torch.nn.functional.mse_loss(z_e, z_quantized.detach())
-        loss = recon_loss + codebook_loss + (self.beta * commit_loss)
+        loss, losses = compute_vq_losses(
+            x_pred,
+            x,
+            z_e,
+            z_quantized,
+            indices=None,
+            beta=self.lam_beta,
+            quantizer_type=QuantizerType.VANILLA,
+            codebook_size=self.latent_action_model.codebook.shape[0],
+            entropy_weight=0.0,
+            lpips_weight=0.0,
+            lpips_metric=self.lpips_metric,
+        )
 
         self._log_losses(
-            loss, recon_loss, codebook_loss, commit_loss, is_training=False
+            loss,
+            losses["recon_loss"],
+            losses["codebook_loss"],
+            losses["commit_loss"],
+            is_training=False,
         )
 
         with torch.no_grad():
-            # LPIPS expects inputs in [-1,1]; convert if you're in [0,1].
-            B, C, F, H, W = x.shape
-            to_lpips = lambda t: ((t * 2.0) - 1.0).reshape(B * F, C, H, W)
-            lpips_val = self.lpips_metric(to_lpips(x_pred), to_lpips(x)).mean()
+            lpips_val = compute_lpips_loss(self.lpips_metric, x_pred, x)
         self.log("val_lpips", lpips_val, prog_bar=False, logger=True, sync_dist=True)
         return loss
 

@@ -12,7 +12,13 @@ class GenieModel(nn.Module):
     """
     Genie
     """
-    def __init__(self, lam_cfg: LamConfig, dyn_cfg: DynamicsConfig, tokenizer_cfg: TokenizerConfig) -> None:
+    def __init__(
+        self,
+        lam_cfg: LamConfig,
+        dyn_cfg: DynamicsConfig,
+        tokenizer_cfg: TokenizerConfig,
+        pretrained_tokenizer: VQTokenizer,
+    ) -> None:
         super().__init__()
 
         self.lam = LatentActionModel(
@@ -35,9 +41,7 @@ class GenieModel(nn.Module):
             lam_cfg=lam_cfg,
             tokenizer_cfg=tokenizer_cfg,
         )
-        self.tokenizer = VQTokenizer(
-            cfg=tokenizer_cfg,
-        )  # TODO: this is going to be pretrained and frozen at inference time. placeholder for now.
+        self.tokenizer = pretrained_tokenizer
 
     def forward(
         self,
@@ -47,6 +51,8 @@ class GenieModel(nn.Module):
     ) -> dict[str, torch.Tensor]:
         """
         Run the requested submodules and return their outputs.
+
+        TODO: implement exact flow from paper diagram. 
         """
         outputs: dict[str, torch.Tensor] = {}
         if lam_inputs is not None:

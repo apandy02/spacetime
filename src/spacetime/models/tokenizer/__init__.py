@@ -6,6 +6,10 @@ from spacetime.models.tokenizer.config import (
     OptimizerConfig,
     QuantizerConfig,
 )
+from spacetime.models.tokenizer.load import (
+    load_pretrained_tokenizer_config,
+    load_pretrained_tokenizer_from_checkpoint,
+)
 from spacetime.models.tokenizer.model import VQTokenizer
 from spacetime.models.tokenizer.training_module import VQTokenizerModule
 from spacetime.modules.quantizers import QuantizerType
@@ -20,4 +24,6 @@ __all__ = [
     "QuantizerType",
     "VQTokenizer",
     "VQTokenizerModule",
+    "load_pretrained_tokenizer_config",
+    "load_pretrained_tokenizer_from_checkpoint",
 ]
