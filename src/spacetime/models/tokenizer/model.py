@@ -4,15 +4,12 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from spacetime.modules.quantizers import (
-    EMAVectorQuantizer,
-    QuantizerType,
-    VanillaVectorQuantizer,
-)
+from spacetime.models.tokenizer.config import TokenizerConfig
+from spacetime.modules.quantizers import (EMAVectorQuantizer, QuantizerType,
+                                          VanillaVectorQuantizer)
 from spacetime.modules.transformer import STTransformerLayer
 from spacetime.modules.utils import patchify, unpatchify
 
-from spacetime.models.tokenizer.config import TokenizerConfig
 
 class VQTokenizer(nn.Module):
     """

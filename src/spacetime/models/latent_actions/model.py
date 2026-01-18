@@ -3,19 +3,14 @@ from torch import nn
 
 from spacetime.models.tokenizer.model import VQVAEVideoEncoder
 from spacetime.modules.transformer import STTransformerLayer
-from spacetime.modules.utils import (
-    build_anti_causal_mask,
-    build_causal_mask,
-    patchify,
-    unpatchify,
-)
+from spacetime.modules.utils import (build_anti_causal_mask, build_causal_mask,
+                                     patchify, unpatchify)
 
 
 class LatentActionModel(nn.Module):
     """
     Latent action model (VAE with quantized latent actions).
     """
-
     def __init__(
         self,
         num_heads: int,

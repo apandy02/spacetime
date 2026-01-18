@@ -3,17 +3,14 @@ import math
 import lightning as L
 import lpips
 import torch
-import wandb
 from lightning.pytorch.loggers import WandbLogger
 
+import wandb
 from spacetime.models.tokenizer.config import Hyperparameters
 from spacetime.models.tokenizer.model import VQTokenizer
 from spacetime.modules.quantizers import QuantizerType
-from spacetime.utils.vq_losses import (
-    compute_entropy_loss,
-    compute_lpips_loss,
-    compute_vq_losses,
-)
+from spacetime.utils.vq_losses import (compute_entropy_loss,
+                                       compute_lpips_loss, compute_vq_losses)
 
 
 class VQTokenizerModule(L.LightningModule):

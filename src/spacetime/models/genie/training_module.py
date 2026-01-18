@@ -1,12 +1,14 @@
 import lightning as L
 import lpips
 import torch
-
-import wandb
 from lightning.pytorch.loggers import WandbLogger
 
+import wandb
+from spacetime.models.dynamics_model.dynamics_model import DynamicsModel
 from spacetime.models.genie.config import Config
 from spacetime.models.latent_actions.model import LatentActionModel
+from spacetime.models.tokenizer.load import \
+    load_pretrained_tokenizer_from_checkpoint
 from spacetime.modules.quantizers import QuantizerType
 from spacetime.utils.vq_losses import compute_lpips_loss, compute_vq_losses
 
@@ -44,11 +46,16 @@ class GenieTrainingModule(L.LightningModule):
         self.lpips_metric.eval()
         for p in self.lpips_metric.parameters():
             p.requires_grad = False
+
+        self.tokenizer, self.tokenizer_cfg = load_pretrained_tokenizer_from_checkpoint(
+            self.cfg.tokenizer_checkpoint,
+            self.cfg.tokenizer_wandb_path,
+        )
         
         self.dynamics_model = DynamicsModel(
             dynamics_cfg=self.cfg.hparams.dynamics,
             lam_cfg=self.cfg.hparams.lam,
-            tokenizer_cfg=self.cfg.hparams.tokenizer,
+            tokenizer_cfg=self.tokenizer_cfg,
         )
 
     def forward(self, inputs):
@@ -58,6 +65,23 @@ class GenieTrainingModule(L.LightningModule):
         return torch.optim.AdamW(self.latent_action_model.parameters(), lr=3e-4)
 
     def training_step(self, batch, batch_idx):
+        """
+        Notes: 
+        
+        at each step we will: run the forward pass (this is contained in the genie model wrapper)
+
+        this will return the maskgit output + the lam vq vae decoder and encoder outputs 
+
+        we have a dynamics model loss + the vq vae losses (reconstruction and commitment
+        -- abstracted away by the compute_vq_losses function) 
+
+        Args:
+            batch (_type_): _description_
+            batch_idx (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         x, _ = batch
         x_pred, z_e, z_quantized = self(x)
         loss, losses = compute_vq_losses(

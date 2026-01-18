@@ -10,12 +10,9 @@ from torchvision.datasets import UCF101
 
 from spacetime.models.genie.config import Config
 from spacetime.models.genie.training_module import GenieTrainingModule
-from spacetime.utils import (
-    get_logger,
-    is_rank_zero,
-    maybe_disable_wandb_for_non_zero_ranks,
-    maybe_set_wandb_sandbox_key,
-)
+from spacetime.utils import (get_logger, is_rank_zero,
+                             maybe_disable_wandb_for_non_zero_ranks,
+                             maybe_set_wandb_sandbox_key)
 
 logger = get_logger("spacetime.genie")
 

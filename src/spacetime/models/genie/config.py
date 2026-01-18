@@ -74,3 +74,5 @@ class Config:
     """
     training: TrainingConfig = field(default_factory=TrainingConfig)
     hparams: Hyperparameters = field(default_factory=Hyperparameters)
+    tokenizer_checkpoint: Path
+    tokenizer_wandb_path: Path
