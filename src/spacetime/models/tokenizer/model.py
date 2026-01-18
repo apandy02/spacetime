@@ -96,16 +96,32 @@ class VQTokenizer(nn.Module):
             z_q: quantized representation
             indices: codebook indices
         """
-        x = patchify(x, self.patch_size)
-        x = self.d_model_projection(x)
-        z_e_raw = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
-        z_q, indices, z_e = self.vector_quantizer(z_e_raw)
-
+        z_q, indices, z_e = self.tokenize(x)
         z_q_st = z_e + (z_q - z_e).detach()
+        
         x_pred = unpatchify(
             self.decoder(z_q_st), self.patch_size, self.n_patch_h, self.n_patch_w
         )
         return x_pred, z_e, z_q, indices
+
+    def tokenize(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Encode inputs into quantized codebook vectors and indices without decoding.
+
+        Args:
+            x: [B, C, F, H, W] (the input video)
+        Returns:
+            z_q: [B, F, N, D_codebook] (the quantized video)
+            indices: [B, F, N] (the codebook indices)
+            z_e: [B, F, N, D_model] (the encoder outputs)
+        """
+        x = patchify(x, self.patch_size)
+        x = self.d_model_projection(x)
+        z_e_raw = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
+        return self.vector_quantizer(z_e_raw)
+
 
     def quantizer_factory(self, quantizer_type: QuantizerType) -> nn.Module:
         if quantizer_type == QuantizerType.VANILLA:

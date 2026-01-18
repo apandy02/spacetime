@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from spacetime.modules.quantizers import QuantizerType
+
 
 @dataclass
 class LamConfig:
@@ -21,6 +23,11 @@ class LamConfig:
     num_groups: int = 8
     dropout: float = 0.1
     beta: float = 0.25
+    quantizer_type: QuantizerType = QuantizerType.VANILLA
+    quantizer_decay: float = 0.985
+    quantizer_eps: float = 1e-5
+    dead_code_threshold: float = 1e-4
+    dead_code_noise: float = 1e-4
 
 
 @dataclass
@@ -43,14 +50,9 @@ class TrainingConfig:
     """
     Training loop and data settings.
     """
-    data_root: Path = Path(__file__).resolve().parents[4] / "data/UCF-101-downsized"
-    annotation_path: Path = (
-        Path(__file__).resolve().parents[4] / "data/ucfTrainTestlist"
-    )
-    frames_per_clip: int = 8
-    step_between_clips: int = 8
-    train_batch_size: int = 16
-    val_batch_size: int = 4
+    shard_dir: Path = Path(__file__).resolve().parents[4] / "data/procgen_heist/shards"
+    train_ratio: float = 0.8
+    batch_size: int = 16
     num_workers: int = 8
     pin_memory: bool = True
     max_epochs: int = 10

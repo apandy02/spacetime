@@ -2,31 +2,21 @@ from dataclasses import asdict
 
 import lightning as L
 import torch
-import torch.nn.functional as F
 import tyro
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
-from torch.utils.data import DataLoader
-from torchvision.datasets import UCF101
+from torch.utils.data import DataLoader, random_split
 
 from spacetime.models.genie.config import Config
 from spacetime.models.genie.training_module import GenieTrainingModule
-from spacetime.utils import (get_logger, is_rank_zero,
-                             maybe_disable_wandb_for_non_zero_ranks,
-                             maybe_set_wandb_sandbox_key)
+from spacetime.utils import (
+    get_logger,
+    is_rank_zero,
+    maybe_disable_wandb_for_non_zero_ranks,
+    maybe_set_wandb_sandbox_key,
+)
+from spacetime.utils.data import ProcgenShardDataset
 
 logger = get_logger("spacetime.genie")
-
-
-def collate_ucf101(batch):
-    xs, ys = [], []
-    for v, _, l in batch:
-        v = v.permute(0, 3, 1, 2)
-        v = v.float() / 255.0
-        v = F.interpolate(v, size=(224, 224), mode="bilinear", align_corners=False)
-        v = v.permute(1, 0, 2, 3).contiguous()
-        xs.append(v.clone())
-        ys.append(int(l))
-    return torch.stack(xs, 0), torch.tensor(ys, dtype=torch.long)
 
 
 def run(cfg: Config) -> None:
@@ -35,41 +25,31 @@ def run(cfg: Config) -> None:
     logger.info("Starting latent action training")
     tc = cfg.training
     lam_cfg = cfg.hparams.lam
-    logger.info("Data root: %s", tc.data_root)
-    logger.info("Annotation path: %s", tc.annotation_path)
-    logger.info(
-        "Train/val batch sizes: %s/%s", tc.train_batch_size, tc.val_batch_size
-    )
+    logger.info("Shard dir: %s", tc.shard_dir)
+    logger.info("Train/val batch size: %s", tc.batch_size)
 
-    train_dataset = UCF101(
-        root=str(tc.data_root),
-        annotation_path=str(tc.annotation_path),
-        frames_per_clip=tc.frames_per_clip,
-        step_between_clips=tc.step_between_clips,
-        train=True,
-    )
-    val_dataset = UCF101(
-        root=str(tc.data_root),
-        annotation_path=str(tc.annotation_path),
-        frames_per_clip=tc.frames_per_clip,
-        step_between_clips=tc.step_between_clips,
-        train=False,
+    tc.shard_dir.mkdir(parents=True, exist_ok=True)
+    shard_dataset = ProcgenShardDataset(tc.shard_dir, normalize=True)
+    train_size = int(tc.train_ratio * len(shard_dataset))
+    val_size = len(shard_dataset) - train_size
+    train_dataset, val_dataset = random_split(
+        shard_dataset,
+        [train_size, val_size],
+        generator=torch.Generator().manual_seed(42),
     )
 
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=tc.train_batch_size,
+        batch_size=tc.batch_size,
         shuffle=True,
         num_workers=tc.num_workers,
-        collate_fn=collate_ucf101,
         pin_memory=tc.pin_memory,
     )
     val_dataloader = DataLoader(
         val_dataset,
-        batch_size=tc.val_batch_size,
+        batch_size=tc.batch_size,
         shuffle=False,
         num_workers=tc.num_workers,
-        collate_fn=collate_ucf101,
         pin_memory=tc.pin_memory,
     )
 
@@ -110,4 +90,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    logger.info("Train clips: %s | Val clips: %s", len(train_dataset), len(val_dataset))

@@ -9,7 +9,6 @@ from spacetime.models.genie.config import Config
 from spacetime.models.latent_actions.model import LatentActionModel
 from spacetime.models.tokenizer.load import \
     load_pretrained_tokenizer_from_checkpoint
-from spacetime.modules.quantizers import QuantizerType
 from spacetime.utils.vq_losses import compute_lpips_loss, compute_vq_losses
 
 
@@ -23,21 +22,7 @@ class GenieTrainingModule(L.LightningModule):
         super().__init__()
         self.cfg = cfg
         lam_cfg = cfg.hparams.lam
-        self.latent_action_model = LatentActionModel(
-            num_heads=lam_cfg.num_heads,
-            d_model=lam_cfg.d_model,
-            num_layers=lam_cfg.num_layers,
-            d_linear=lam_cfg.d_linear,
-            num_discrete_actions=lam_cfg.num_discrete_actions,
-            codebook_dim=lam_cfg.codebook_dim,
-            patch_size=lam_cfg.patch_size,
-            frame_height=lam_cfg.frame_height,
-            frame_width=lam_cfg.frame_width,
-            num_frames=lam_cfg.num_frames,
-            num_linear_layers=lam_cfg.num_linear_layers,
-            num_groups=lam_cfg.num_groups,
-            dropout=lam_cfg.dropout,
-        )
+        self.latent_action_model = LatentActionModel(lam_cfg)
         self.lam_beta = lam_cfg.beta
         self.example_clip = None
         self.example_recon = None
@@ -91,8 +76,8 @@ class GenieTrainingModule(L.LightningModule):
             z_quantized,
             indices=None,
             beta=self.lam_beta,
-            quantizer_type=QuantizerType.VANILLA,
-            codebook_size=self.latent_action_model.codebook.shape[0],
+            quantizer_type=self.cfg.hparams.lam.quantizer_type,
+            codebook_size=self.latent_action_model.vector_quantizer.codebook_size,
             entropy_weight=0.0,
             lpips_weight=0.0,
             lpips_metric=self.lpips_metric,
@@ -121,8 +106,8 @@ class GenieTrainingModule(L.LightningModule):
             z_quantized,
             indices=None,
             beta=self.lam_beta,
-            quantizer_type=QuantizerType.VANILLA,
-            codebook_size=self.latent_action_model.codebook.shape[0],
+            quantizer_type=self.cfg.hparams.lam.quantizer_type,
+            codebook_size=self.latent_action_model.vector_quantizer.codebook_size,
             entropy_weight=0.0,
             lpips_weight=0.0,
             lpips_metric=self.lpips_metric,

@@ -1,75 +1,90 @@
 import torch
 from torch import nn
 
+from spacetime.models.genie.config import LamConfig
 from spacetime.models.tokenizer.model import VQVAEVideoEncoder
+from spacetime.modules.quantizers import (
+    EMAVectorQuantizer,
+    QuantizerType,
+    VanillaVectorQuantizer,
+)
 from spacetime.modules.transformer import STTransformerLayer
-from spacetime.modules.utils import (build_anti_causal_mask, build_causal_mask,
-                                     patchify, unpatchify)
+from spacetime.modules.utils import (
+    build_anti_causal_mask,
+    build_causal_mask,
+    patchify,
+    unpatchify,
+)
 
 
 class LatentActionModel(nn.Module):
     """
     Latent action model (VAE with quantized latent actions).
     """
+
     def __init__(
         self,
-        num_heads: int,
-        d_model: int,
-        num_layers: int,
-        d_linear: int,
-        num_discrete_actions: int,
-        codebook_dim: int,
-        num_linear_layers: int = 2,
-        num_groups: int = 8,
-        dropout: float = 0.1,
-        patch_size: int = 16,
-        frame_height: int = 128,
-        frame_width: int = 128,
-        num_frames: int = 16,
+        lam_cfg: LamConfig,
     ):
         super(LatentActionModel, self).__init__()
-        self.patch_size = patch_size
-        self.frame_height = frame_height
-        self.frame_width = frame_width
-        self.num_frames = num_frames
-        self.n_patch_h = frame_height // patch_size
-        self.n_patch_w = frame_width // patch_size
+        self.patch_size = lam_cfg.patch_size
+        self.frame_height = lam_cfg.frame_height
+        self.frame_width = lam_cfg.frame_width
+        self.num_frames = lam_cfg.num_frames
+        self.n_patch_h = lam_cfg.frame_height // lam_cfg.patch_size
+        self.n_patch_w = lam_cfg.frame_width // lam_cfg.patch_size
         self.n_patches = self.n_patch_h * self.n_patch_w
 
-        d_patches = 3 * patch_size * patch_size  # hardcoded for RGB
+        d_patches = 3 * lam_cfg.patch_size * lam_cfg.patch_size  # hardcoded for RGB
 
-        self.d_model_projection = nn.Linear(d_patches, d_model)
+        self.d_model_projection = nn.Linear(d_patches, lam_cfg.d_model)
 
-        self.pos_embed_space = nn.Parameter(torch.zeros(1, 1, self.n_patches, d_model))
-        self.pos_embed_time = nn.Parameter(torch.zeros(1, self.num_frames, 1, d_model))
+        self.pos_embed_space = nn.Parameter(
+            torch.zeros(1, 1, self.n_patches, lam_cfg.d_model)
+        )
+        self.pos_embed_time = nn.Parameter(
+            torch.zeros(1, self.num_frames, 1, lam_cfg.d_model)
+        )
 
         self.anti_causal_encoder = VQVAEVideoEncoder(
-            num_heads=num_heads,
-            d_model=d_model,
-            num_layers=num_layers,
-            d_linear=d_linear,
-            codebook_dim=codebook_dim,
-            num_linear_layers=num_linear_layers,
-            num_groups=num_groups,
-            dropout=dropout,
+            num_heads=lam_cfg.num_heads,
+            d_model=lam_cfg.d_model,
+            num_layers=lam_cfg.num_layers,
+            d_linear=lam_cfg.d_linear,
+            codebook_dim=lam_cfg.codebook_dim,
+            num_linear_layers=lam_cfg.num_linear_layers,
+            num_groups=lam_cfg.num_groups,
+            dropout=lam_cfg.dropout,
             is_causal=False,
             mask=build_anti_causal_mask,
         )
 
-        self.codebook = nn.Parameter(
-            torch.randn(num_discrete_actions, codebook_dim) * 0.02, requires_grad=True
-        )
+        if lam_cfg.quantizer_type == QuantizerType.EMA:
+            self.vector_quantizer = EMAVectorQuantizer(
+                lam_cfg.num_discrete_actions,
+                lam_cfg.codebook_dim,
+                decay=lam_cfg.quantizer_decay,
+                eps=lam_cfg.quantizer_eps,
+                dead_code_threshold=lam_cfg.dead_code_threshold,
+                dead_code_noise=lam_cfg.dead_code_noise,
+            )
+        elif lam_cfg.quantizer_type == QuantizerType.VANILLA:
+            self.vector_quantizer = VanillaVectorQuantizer(
+                lam_cfg.num_discrete_actions, lam_cfg.codebook_dim
+            )
+        else:
+            raise ValueError(f"Invalid quantizer type: {lam_cfg.quantizer_type}")
         self.decoder = LatentActionDecoder(
-            num_heads=num_heads,
-            d_model=d_model,
-            num_layers=num_layers,
-            d_linear=d_linear,
-            codebook_dim=codebook_dim,
+            num_heads=lam_cfg.num_heads,
+            d_model=lam_cfg.d_model,
+            num_layers=lam_cfg.num_layers,
+            d_linear=lam_cfg.d_linear,
+            codebook_dim=lam_cfg.codebook_dim,
             input_image_channels=3,
-            patch_size=patch_size,
-            num_linear_layers=num_linear_layers,
-            num_groups=num_groups,
-            dropout=dropout,
+            patch_size=lam_cfg.patch_size,
+            num_linear_layers=lam_cfg.num_linear_layers,
+            num_groups=lam_cfg.num_groups,
+            dropout=lam_cfg.dropout,
         )
 
     def forward(
@@ -88,11 +103,9 @@ class LatentActionModel(nn.Module):
         frame_embeddings = self.d_model_projection(x)
         encoder_input = frame_embeddings + self.pos_embed_space + self.pos_embed_time
         encoder_output = self.anti_causal_encoder(encoder_input)
-        action_codes = quantize(encoder_output, self.codebook)
+        action_codes, _, z_e = self.vector_quantizer(encoder_output)
 
-        st_estimator_action_codes = (
-            encoder_output + (action_codes - encoder_output).detach()
-        )
+        st_estimator_action_codes = z_e + (action_codes - z_e).detach()
         frame_reconstructions = self.decoder(
             st_estimator_action_codes,
             frame_embeddings,
@@ -103,7 +116,7 @@ class LatentActionModel(nn.Module):
             unpatchify(
                 frame_reconstructions, self.patch_size, self.n_patch_h, self.n_patch_w
             ),
-            encoder_output,
+            z_e,
             action_codes,
         )
 
