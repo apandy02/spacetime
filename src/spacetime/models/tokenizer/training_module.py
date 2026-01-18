@@ -16,9 +16,9 @@ from spacetime.utils.vq_losses import (
 )
 
 
-class STVQVaeModule(L.LightningModule):
+class VQTokenizerModule(L.LightningModule):
     """
-    PyTorch Lightning module for training the STVQVae tokenizer.
+    PyTorch Lightning module for training the spacetime transformer-based VQ-VAE tokenizer.
     
     Args:
         cfg: Hierarchical hyperparameters configuration.

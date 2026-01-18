@@ -26,22 +26,16 @@ class LamConfig:
 @dataclass
 class DynamicsConfig:
     """
-    Dynamics model config (model params only for now).
+    Dynamics model (MaskGIT) architecture settings.
     """
-    n_heads: int = 4
-    d_model: int = 384
-    n_layers: int = 2
-    d_linear: int = 1536
-    action_codebook_size: int = 1024
-    action_dim: int = 128
-    token_codebook_size: int = 1024
-    token_dim: int = 32
-    n_tokens: int = 256
-    p_sample: float = 0.2
+    n_heads: int = 8
+    d_model: int = 512
+    n_layers: int = 6
+    d_linear: int = 2048
     n_linear_layers: int = 2
     n_groups: int = 8
     dropout: float = 0.1
-    n_frames: int = 16
+    p_sample: float = 0.2
 
 
 @dataclass
@@ -70,7 +64,7 @@ class Hyperparameters:
     """
     lam: LamConfig = field(default_factory=LamConfig)
     dynamics: DynamicsConfig = field(default_factory=DynamicsConfig)
-    lambda_reconstruction: float = 1.0
+    lambda_reconstruction: float = 0.01
 
 
 @dataclass

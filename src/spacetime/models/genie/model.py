@@ -5,7 +5,7 @@ from spacetime.models.dynamics_model.dynamics_model import DynamicsModel
 from spacetime.models.genie.config import LamConfig, DynamicsConfig
 from spacetime.models.tokenizer.config import TokenizerConfig
 from spacetime.models.latent_actions.model import LatentActionModel
-from spacetime.models.tokenizer.model import STVQVae
+from spacetime.models.tokenizer.model import VQTokenizer
 
 
 class GenieModel(nn.Module):
@@ -31,29 +31,13 @@ class GenieModel(nn.Module):
             dropout=lam_cfg.dropout,
         )
         self.dynamics = DynamicsModel(
-            n_heads=dyn_cfg.n_heads,
-            d_model=dyn_cfg.d_model,
-            n_layers=dyn_cfg.n_layers,
-            d_linear=dyn_cfg.d_linear,
-            action_codebook_size=dyn_cfg.action_codebook_size,
-            action_dim=dyn_cfg.action_dim,
-            token_codebook_size=dyn_cfg.token_codebook_size,
-            token_dim=dyn_cfg.token_dim,
-            n_tokens=dyn_cfg.n_tokens,
-            p_sample=dyn_cfg.p_sample,
-            n_linear_layers=dyn_cfg.n_linear_layers,
-            n_groups=dyn_cfg.n_groups,
-            dropout=dyn_cfg.dropout,
-            n_frames=dyn_cfg.n_frames,
+            dynamics_cfg=dyn_cfg,
+            lam_cfg=lam_cfg,
+            tokenizer_cfg=tokenizer_cfg,
         )
-        self.tokenizer = STVQVae(
-            num_heads=tokenizer_cfg.num_heads,
-            d_model=tokenizer_cfg.d_model,
-            num_layers=tokenizer_cfg.num_layers,
-            d_linear=tokenizer_cfg.d_linear,
-            codebook_size=tokenizer_cfg.codebook_size,
-            codebook_dim=tokenizer_cfg.codebook_dim,
-        )
+        self.tokenizer = VQTokenizer(
+            cfg=tokenizer_cfg,
+        )  # TODO: this is going to be pretrained and frozen at inference time. placeholder for now.
 
     def forward(
         self,

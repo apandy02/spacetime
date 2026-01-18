@@ -11,16 +11,6 @@ from spacetime.modules.utils import (
 )
 
 
-def quantize(z_e: torch.Tensor, codebook: torch.Tensor) -> torch.Tensor:
-    codebook_dim = codebook.shape[1]
-    encoded = z_e.reshape(-1, codebook_dim)
-    z_sq = (encoded**2).sum(dim=1, keepdim=True)
-    e_sq = (codebook**2).sum(dim=1)
-    dist = z_sq + e_sq - 2 * encoded @ codebook.t()
-    indices = dist.argmin(dim=1)
-    return codebook[indices].reshape_as(z_e)
-
-
 class LatentActionModel(nn.Module):
     """
     Latent action model (VAE with quantized latent actions).
@@ -67,6 +57,7 @@ class LatentActionModel(nn.Module):
             num_linear_layers=num_linear_layers,
             num_groups=num_groups,
             dropout=dropout,
+            is_causal=False,
             mask=build_anti_causal_mask,
         )
 

@@ -10,13 +10,20 @@ from spacetime.modules.quantizers import (
 from spacetime.modules.transformer import STTransformerLayer
 from spacetime.modules.utils import patchify, unpatchify
 
+from spacetime.models.tokenizer.config import TokenizerConfig
 
 class VQTokenizer(nn.Module):
     """
     Spatio-temporal VQ-VAE tokenizer.
     """
 
-    def __init__(self, cfg):
+    def __init__(self, cfg: TokenizerConfig):
+        """
+        Initialize the ST Transformer-based VQ-VAE tokenizer.
+
+        Args:
+            cfg (TokenizerConfig): Configuration for the VQTokenizer.
+        """
         super().__init__()
         model_cfg = cfg.model
         quant_cfg = cfg.quantizer
@@ -125,10 +132,12 @@ class VQVAEVideoEncoder(nn.Module):
         num_groups: int = 8,
         dropout: float = 0.1,
         is_causal: bool = True,
+        mask=None,
         gradient_checkpointing: bool = False,
     ):
         super(VQVAEVideoEncoder, self).__init__()
         self.gradient_checkpointing = gradient_checkpointing
+        use_causal = is_causal if mask is None else False
         self.layers = nn.ModuleList(
             [
                 STTransformerLayer(
@@ -138,7 +147,8 @@ class VQVAEVideoEncoder(nn.Module):
                     num_linear_layers,
                     num_groups,
                     dropout,
-                    is_causal=is_causal,
+                    mask=mask,
+                    is_causal=use_causal,
                 )
                 for _ in range(num_layers)
             ]

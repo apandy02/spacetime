@@ -7,8 +7,8 @@ import tyro
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from torch.utils.data import DataLoader, random_split
 
-from spacetime.models.tokenizer.config import Hyperparameters, TrainingConfig
-from spacetime.models.tokenizer.training_module import STVQVaeModule
+from spacetime.models.tokenizer.config import TokenizerConfig, TrainingConfig
+from spacetime.models.tokenizer.training_module import VQTokenizerModule
 from spacetime.utils import (
     get_logger,
     is_rank_zero,
@@ -27,7 +27,7 @@ class Config:
     num_workers: int = 8
     pin_memory: bool = True
     training: TrainingConfig = field(default_factory=TrainingConfig)
-    hparams: Hyperparameters = field(default_factory=Hyperparameters)
+    hparams: TokenizerConfig = field(default_factory=TokenizerConfig)
 
 
 def create_dataloaders(cfg: Config) -> tuple[DataLoader, DataLoader]:
@@ -110,7 +110,7 @@ def run(cfg: Config) -> None:
 
     tc = cfg.training
     total_steps = tc.max_epochs * len(train_dataloader)
-    lightning_module = STVQVaeModule(cfg=cfg.hparams, total_steps=total_steps)
+    lightning_module = VQTokenizerModule(cfg=cfg.hparams, total_steps=total_steps)
     if tc.compile_model:
         lightning_module.model = torch.compile(
             lightning_module.model, backend=tc.compile_backend, mode=tc.compile_mode

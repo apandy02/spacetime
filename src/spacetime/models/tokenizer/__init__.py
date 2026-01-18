@@ -7,7 +7,7 @@ from spacetime.models.tokenizer.config import (
     QuantizerConfig,
 )
 from spacetime.models.tokenizer.model import VQTokenizer
-from spacetime.models.tokenizer.training_module import STVQVaeModule
+from spacetime.models.tokenizer.training_module import VQTokenizerModule
 from spacetime.modules.quantizers import QuantizerType
 
 __all__ = [
@@ -19,5 +19,5 @@ __all__ = [
     "QuantizerConfig",
     "QuantizerType",
     "VQTokenizer",
-    "STVQVaeModule",
+    "VQTokenizerModule",
 ]

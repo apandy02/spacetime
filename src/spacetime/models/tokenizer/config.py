@@ -86,7 +86,7 @@ class TrainingConfig:
 
 
 @dataclass
-class Hyperparameters:
+class TokenizerConfig:
     """
     All model hyperparameters, hierarchically organized.
     
@@ -102,3 +102,7 @@ class Hyperparameters:
     beta: BetaScheduleConfig = field(default_factory=BetaScheduleConfig)
     optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     loss: LossConfig = field(default_factory=LossConfig)
+
+
+# Backwards-compatible alias
+Hyperparameters = TokenizerConfig
