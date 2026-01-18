@@ -83,7 +83,8 @@ class DynamicsModel(nn.Module):
 
     def forward(self, tokens: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
         """
-        forward pass for maskgit based dynamics model
+        forward pass for maskgit based dynamics model -- implements the maskgit forward pass minus 
+        iterative demasking
         """
         tokens = self.token_projector(tokens)
         actions = self.action_projector(actions)

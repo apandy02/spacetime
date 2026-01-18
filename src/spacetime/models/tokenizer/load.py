@@ -16,6 +16,9 @@ def load_pretrained_tokenizer_from_checkpoint(
     *,
     map_location: str | torch.device = "cpu",
 ) -> tuple[VQTokenizer, Hyperparameters]:
+    """
+    Load a pretrained tokenizer from a Lightning checkpoint and a W&B config.
+    """
     cfg = load_pretrained_tokenizer_config(wandb_path)
     checkpoint = torch.load(checkpoint_path, map_location=map_location)
     state_dict = checkpoint.get("state_dict", checkpoint)

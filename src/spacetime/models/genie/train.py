@@ -1,3 +1,6 @@
+"""
+trainer module for Genie: Generative Interactive Environments
+"""
 from dataclasses import asdict
 
 import lightning as L
@@ -8,9 +11,12 @@ from torch.utils.data import DataLoader, random_split
 
 from spacetime.models.genie.config import Config
 from spacetime.models.genie.training_module import GenieTrainingModule
-from spacetime.utils import (get_logger, is_rank_zero,
-                             maybe_disable_wandb_for_non_zero_ranks,
-                             maybe_set_wandb_sandbox_key)
+from spacetime.utils import (
+    get_logger,
+    is_rank_zero,
+    maybe_disable_wandb_for_non_zero_ranks,
+    maybe_set_wandb_sandbox_key,
+)
 from spacetime.utils.data import ProcgenShardDataset
 
 logger = get_logger("spacetime.genie")
@@ -51,7 +57,6 @@ def run(cfg: Config) -> None:
     )
 
     if is_rank_zero():
-        # Let wandb generate a random name, then use its run ID for CSV logger
         wandb_logger = WandbLogger(project="spacetime", config=asdict(lam_cfg))
         run_id = wandb_logger.experiment.id
         csv_logger = CSVLogger(save_dir="lightning_logs", name=run_id)
@@ -61,7 +66,9 @@ def run(cfg: Config) -> None:
 
     lightning_module = GenieTrainingModule(cfg)
 
-    logger.info("Initializing trainer (max_epochs=%s, precision=%s)", tc.max_epochs, tc.precision)
+    logger.info(
+        "Initializing trainer (max_epochs=%s, precision=%s)", tc.max_epochs, tc.precision
+    )
     trainer = L.Trainer(
         max_epochs=tc.max_epochs,
         precision=tc.precision,

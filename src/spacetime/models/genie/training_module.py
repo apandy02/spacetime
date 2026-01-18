@@ -9,8 +9,7 @@ from lightning.pytorch.loggers import WandbLogger
 import wandb
 from spacetime.models.genie.config import Config
 from spacetime.models.genie.model import GenieModel
-from spacetime.models.tokenizer.load import \
-    load_pretrained_tokenizer_from_checkpoint
+from spacetime.models.tokenizer.load import load_pretrained_tokenizer_from_checkpoint
 from spacetime.utils.vq_losses import compute_lpips_loss, compute_vq_losses
 
 
@@ -62,8 +61,8 @@ class GenieTrainingModule(L.LightningModule):
 
         this will return the maskgit output + the lam vq vae decoder and encoder outputs
 
-        we have a dynamics model loss + the vq vae losses (reconstruction and commitment
-        -- abstracted away by the compute_vq_losses function)
+        we have a dynamics model loss (cross entropy on token indices) + the vq vae losses 
+        (reconstruction and commitment -- abstracted away by the compute_vq_losses function)
 
         Args:
             batch: Tuple[torch.Tensor, Any]
@@ -97,16 +96,8 @@ class GenieTrainingModule(L.LightningModule):
             losses["recon_loss"],
             losses["codebook_loss"],
             losses["commit_loss"],
-            is_training=True,
-        )
-        self.log(
-            "train_dynamics_loss",
             dynamics_loss,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=False,
-            logger=True,
-            sync_dist=False,
+            is_training=True,
         )
 
         if batch_idx == 0:
@@ -115,6 +106,10 @@ class GenieTrainingModule(L.LightningModule):
         return total_loss
 
     def validation_step(self, batch, batch_idx):
+        """
+        Run a validation forward pass and log reconstruction, codebook,
+        commitment, and dynamics losses, plus LPIPS and example reconstructions.
+        """
         x, _ = batch
         genie_output = self(x)
         loss, losses = compute_vq_losses(
@@ -140,16 +135,8 @@ class GenieTrainingModule(L.LightningModule):
             losses["recon_loss"],
             losses["codebook_loss"],
             losses["commit_loss"],
-            is_training=False,
-        )
-        self.log(
-            "val_dynamics_loss",
             dynamics_loss,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=False,
-            logger=True,
-            sync_dist=True,
+            is_training=False,
         )
 
         with torch.no_grad():
@@ -163,23 +150,17 @@ class GenieTrainingModule(L.LightningModule):
         return total_loss
 
     def on_validation_epoch_end(self):
+        """
+        Log example reconstruction and dynamics videos to W&B after validation.
+        """
         if self.example_clip is None:
             return
         if not self.trainer.is_global_zero:
             return
 
         clip = (self.example_clip.clamp(0, 1) * 255).to(torch.uint8)
-        recon = (self.example_recon.clamp(0, 1) * 255).to(torch.uint8)
-        video = torch.cat([clip, recon], dim=4)
-        video = video.squeeze(0).permute(1, 0, 2, 3)  # (F, C, H, W)
-
         # Log video to wandb if available
         wandb_logger = self._get_wandb_logger()
-        if wandb_logger is not None:
-            wandb_logger.experiment.log(
-                {"recon_video": wandb.Video(video.squeeze(0), fps=4, format="mp4")},
-                step=self.global_step,
-            )
         if self.example_dynamics_recon is not None:
             dyn_recon = (self.example_dynamics_recon.clamp(0, 1) * 255).to(torch.uint8)
             dyn_video = torch.cat([clip, dyn_recon], dim=4)
@@ -203,8 +184,23 @@ class GenieTrainingModule(L.LightningModule):
                 if isinstance(logger, WandbLogger):
                     return logger
         return None
+    
+    def _compute_dynamics_loss(
+        self, output_logits: torch.Tensor, target_indices: torch.Tensor
+    ) -> torch.Tensor:
+        logits = output_logits.reshape(-1, output_logits.shape[-1])
+        targets = target_indices.reshape(-1)
+        return F.cross_entropy(logits, targets)
 
-    def _log_losses(self, loss, recon_loss, codebook_loss, commit_loss, is_training=True):
+    def _log_losses(
+        self,
+        loss,
+        recon_loss,
+        codebook_loss,
+        commit_loss,
+        dynamics_loss,
+        is_training=True,
+    ):
         prefix = "train" if is_training else "val"
         log_on_step = True if is_training else False
         log_on_epoch = True
@@ -248,10 +244,13 @@ class GenieTrainingModule(L.LightningModule):
                 logger=True,
                 sync_dist=not is_training,
             )
-
-    def _compute_dynamics_loss(
-        self, output_logits: torch.Tensor, target_indices: torch.Tensor
-    ) -> torch.Tensor:
-        logits = output_logits.reshape(-1, output_logits.shape[-1])
-        targets = target_indices.reshape(-1)
-        return F.cross_entropy(logits, targets)
+        if dynamics_loss is not None:
+            self.log(
+                f"{prefix}_dynamics_loss",
+                dynamics_loss,
+                on_step=log_on_step,
+                on_epoch=log_on_epoch,
+                prog_bar=False,
+                logger=True,
+                sync_dist=not is_training,
+            )

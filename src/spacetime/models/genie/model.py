@@ -3,9 +3,9 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-from spacetime.models.dynamics_model.model import DynamicsModel
+from spacetime.models.genie.dynamics import DynamicsModel
 from spacetime.models.genie.config import DynamicsConfig, LamConfig
-from spacetime.models.latent_actions.model import LatentActionModel
+from spacetime.models.genie.latent_actions import LatentActionModel
 from spacetime.models.tokenizer.config import TokenizerConfig
 from spacetime.models.tokenizer.model import VQTokenizer
 

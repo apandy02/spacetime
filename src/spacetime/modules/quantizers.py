@@ -15,7 +15,7 @@ class QuantizerType(Enum):
 
 class EMAVectorQuantizer(nn.Module):
     """
-    EMA vector quantizer
+    Exponentially Moving Averages (EMA) Vector Quantizer
     """
 
     def __init__(
