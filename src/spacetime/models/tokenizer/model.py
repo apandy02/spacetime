@@ -11,6 +11,104 @@ from spacetime.modules.transformer import STTransformerLayer
 from spacetime.modules.utils import patchify, unpatchify
 
 
+class VQTokenizer(nn.Module):
+    """
+    Spatio-temporal VQ-VAE tokenizer.
+    """
+
+    def __init__(self, cfg):
+        super().__init__()
+        model_cfg = cfg.model
+        quant_cfg = cfg.quantizer
+
+        self.patch_size = model_cfg.patch_size
+        self.frame_height = model_cfg.frame_height
+        self.frame_width = model_cfg.frame_width
+        self.num_frames = model_cfg.num_frames
+        self.n_patch_h = model_cfg.frame_height // model_cfg.patch_size
+        self.n_patch_w = model_cfg.frame_width // model_cfg.patch_size
+        self.n_patches = self.n_patch_h * self.n_patch_w
+
+        d_patches = 3 * model_cfg.patch_size * model_cfg.patch_size
+
+        self.d_model_projection = nn.Linear(d_patches, model_cfg.d_model)
+
+        self.pos_embed_space = nn.Parameter(
+            torch.zeros(1, 1, self.n_patches, model_cfg.d_model)
+        )
+        self.pos_embed_time = nn.Parameter(
+            torch.zeros(1, self.num_frames, 1, model_cfg.d_model)
+        )
+
+        self.encoder = VQVAEVideoEncoder(
+            model_cfg.num_heads,
+            model_cfg.d_model,
+            model_cfg.num_layers,
+            model_cfg.d_linear,
+            quant_cfg.codebook_dim,
+            model_cfg.num_linear_layers,
+            model_cfg.num_groups,
+            dropout=model_cfg.dropout,
+            is_causal=True,
+            gradient_checkpointing=model_cfg.gradient_checkpointing,
+        )
+        self.decoder = VQVAEVideoDecoder(
+            model_cfg.num_heads,
+            model_cfg.d_model,
+            model_cfg.num_layers,
+            model_cfg.d_linear,
+            quant_cfg.codebook_dim,
+            input_image_channels=3,
+            patch_size=model_cfg.patch_size,
+            gradient_checkpointing=model_cfg.gradient_checkpointing,
+        )
+        if quant_cfg.type == QuantizerType.EMA:
+            self.vector_quantizer = EMAVectorQuantizer(
+                quant_cfg.codebook_size,
+                quant_cfg.codebook_dim,
+                decay=quant_cfg.decay,
+                eps=quant_cfg.eps,
+                dead_code_threshold=quant_cfg.dead_code_threshold,
+                dead_code_noise=quant_cfg.dead_code_noise,
+            )
+        elif quant_cfg.type == QuantizerType.VANILLA:
+            self.vector_quantizer = VanillaVectorQuantizer(
+                quant_cfg.codebook_size, quant_cfg.codebook_dim
+            )
+        else:
+            raise ValueError(f"Invalid quantizer type: {quant_cfg.type}")
+
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Forward pass for the STVQVAE.
+
+        Returns:
+            x_pred: reconstructed input
+            z_e: encoder output (normalized)
+            z_q: quantized representation
+            indices: codebook indices
+        """
+        x = patchify(x, self.patch_size)
+        x = self.d_model_projection(x)
+        z_e_raw = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
+        z_q, indices, z_e = self.vector_quantizer(z_e_raw)
+
+        z_q_st = z_e + (z_q - z_e).detach()
+        x_pred = unpatchify(
+            self.decoder(z_q_st), self.patch_size, self.n_patch_h, self.n_patch_w
+        )
+        return x_pred, z_e, z_q, indices
+
+    def quantizer_factory(self, quantizer_type: QuantizerType) -> nn.Module:
+        if quantizer_type == QuantizerType.VANILLA:
+            return VanillaVectorQuantizer
+        if quantizer_type == QuantizerType.EMA:
+            return EMAVectorQuantizer
+        raise ValueError(f"Invalid quantizer type: {quantizer_type}")
+
+
 class VQVAEVideoEncoder(nn.Module):
     """
     VQ-VAE video encoder.
@@ -114,113 +212,3 @@ class VQVAEVideoDecoder(nn.Module):
                 x = layer(x)
 
         return self.reconstruction_projector(self.layer_norm(x))
-
-
-class STVQVae(nn.Module):
-    """
-    Spatial-temporal VQ-VAE.
-    """
-
-    def __init__(
-        self,
-        num_heads: int,
-        d_model: int,
-        num_layers: int,
-        d_linear: int,
-        codebook_size: int,
-        codebook_dim: int,
-        patch_size: int,
-        frame_height: int,
-        frame_width: int,
-        num_frames: int,
-        num_linear_layers: int = 2,
-        num_groups: int = 8,
-        dropout: float = 0.1,
-        quantizer_type: QuantizerType = QuantizerType.EMA,
-        quantizer_decay: float = 0.95,
-        quantizer_eps: float = 1e-5,
-        dead_code_threshold: float = 0.01,
-        dead_code_noise: float = 1e-4,
-        gradient_checkpointing: bool = False,
-    ):
-        super(STVQVae, self).__init__()
-        self.patch_size = patch_size
-        self.frame_height = frame_height
-        self.frame_width = frame_width
-        self.num_frames = num_frames
-        self.n_patch_h = frame_height // patch_size
-        self.n_patch_w = frame_width // patch_size
-        self.n_patches = self.n_patch_h * self.n_patch_w
-
-        d_patches = 3 * patch_size * patch_size
-
-        self.d_model_projection = nn.Linear(d_patches, d_model)
-
-        self.pos_embed_space = nn.Parameter(torch.zeros(1, 1, self.n_patches, d_model))
-        self.pos_embed_time = nn.Parameter(torch.zeros(1, self.num_frames, 1, d_model))
-
-        self.encoder = VQVAEVideoEncoder(
-            num_heads,
-            d_model,
-            num_layers,
-            d_linear,
-            codebook_dim,
-            num_linear_layers,
-            num_groups,
-            dropout=dropout,
-            is_causal=True,
-            gradient_checkpointing=gradient_checkpointing,
-        )
-        self.decoder = VQVAEVideoDecoder(
-            num_heads,
-            d_model,
-            num_layers,
-            d_linear,
-            codebook_dim,
-            input_image_channels=3,
-            patch_size=patch_size,
-            gradient_checkpointing=gradient_checkpointing,
-        )
-        if quantizer_type == QuantizerType.EMA:
-            self.vector_quantizer = EMAVectorQuantizer(
-                codebook_size,
-                codebook_dim,
-                decay=quantizer_decay,
-                eps=quantizer_eps,
-                dead_code_threshold=dead_code_threshold,
-                dead_code_noise=dead_code_noise,
-            )
-        elif quantizer_type == QuantizerType.VANILLA:
-            self.vector_quantizer = VanillaVectorQuantizer(codebook_size, codebook_dim)
-        else:
-            raise ValueError(f"Invalid quantizer type: {quantizer_type}")
-
-    def forward(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass for the STVQVAE.
-
-        Returns:
-            x_pred: reconstructed input
-            z_e: encoder output (normalized)
-            z_q: quantized representation
-            indices: codebook indices
-        """
-        x = patchify(x, self.patch_size)
-        x = self.d_model_projection(x)
-        z_e_raw = self.encoder(x + self.pos_embed_space + self.pos_embed_time)
-        z_q, indices, z_e = self.vector_quantizer(z_e_raw)
-
-        z_q_st = z_e + (z_q - z_e).detach()
-        x_pred = unpatchify(
-            self.decoder(z_q_st), self.patch_size, self.n_patch_h, self.n_patch_w
-        )
-        return x_pred, z_e, z_q, indices
-
-    def quantizer_factory(self, quantizer_type: QuantizerType) -> nn.Module:
-        if quantizer_type == QuantizerType.VANILLA:
-            return VanillaVectorQuantizer
-        if quantizer_type == QuantizerType.EMA:
-            return EMAVectorQuantizer
-        raise ValueError(f"Invalid quantizer type: {quantizer_type}")

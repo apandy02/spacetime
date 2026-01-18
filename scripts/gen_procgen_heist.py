@@ -32,6 +32,23 @@ def parse_args() -> argparse.Namespace:
         choices=["easy", "hard", "exploration", "memory", "extreme"],
         help="Procgen distribution mode.",
     )
+    parser.add_argument(
+        "--out-dir",
+        default="data/procgen_heist",
+        help="Output directory for shards and metadata.",
+    )
+    parser.add_argument(
+        "--num-levels",
+        type=int,
+        default=0,
+        help="Number of levels to sample from (0 = infinite).",
+    )
+    parser.add_argument(
+        "--start-level",
+        type=int,
+        default=0,
+        help="Starting level seed.",
+    )
     return parser.parse_args()
 
 
@@ -62,7 +79,7 @@ def main() -> None:
     args = parse_args()
     if args.num_transitions is not None:
         args.num_clips = math.ceil(args.num_transitions / args.clip_len)
-    out_dir = "data/procgen_heist"
+    out_dir = args.out_dir
     os.makedirs(out_dir, exist_ok=True)
     shard_dir = os.path.join(out_dir, "shards")
     os.makedirs(shard_dir, exist_ok=True)
@@ -70,8 +87,8 @@ def main() -> None:
     env = ProcgenEnv(
         num_envs=args.num_envs,
         env_name="heist",
-        num_levels=0,
-        start_level=0,
+        num_levels=args.num_levels,
+        start_level=args.start_level,
         distribution_mode=args.distribution_mode,
         rand_seed=0,
     )
@@ -135,8 +152,8 @@ def main() -> None:
         "num_transitions_saved": int(args.num_clips * args.clip_len),
         "num_envs": args.num_envs,
         "shard_size": 256,
-        "num_levels": 0,
-        "start_level": 0,
+        "num_levels": args.num_levels,
+        "start_level": args.start_level,
         "distribution_mode": args.distribution_mode,
         "repeat_action_prob": 0.0,
         "seed": 0,

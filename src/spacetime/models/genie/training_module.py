@@ -5,44 +5,31 @@ import torch
 import wandb
 from lightning.pytorch.loggers import WandbLogger
 
+from spacetime.models.genie.config import Config
 from spacetime.models.latent_actions.model import LatentActionModel
 
 
-class LatentActionTrainingModule(L.LightningModule):
-    def __init__(
-        self,
-        num_heads,
-        d_model,
-        num_layers,
-        d_linear,
-        num_discrete_actions,
-        codebook_dim,
-        patch_size,
-        frame_height,
-        frame_width,
-        num_frames,
-        num_linear_layers=2,
-        num_groups=8,
-        dropout=0.1,
-        beta=0.25,
-    ):
+class GenieTrainingModule(L.LightningModule):
+    def __init__(self, cfg: Config):
         super().__init__()
+        self.cfg = cfg
+        lam_cfg = cfg.hparams.lam
         self.model = LatentActionModel(
-            num_heads=num_heads,
-            d_model=d_model,
-            num_layers=num_layers,
-            d_linear=d_linear,
-            num_discrete_actions=num_discrete_actions,
-            codebook_dim=codebook_dim,
-            patch_size=patch_size,
-            frame_height=frame_height,
-            frame_width=frame_width,
-            num_frames=num_frames,
-            num_linear_layers=num_linear_layers,
-            num_groups=num_groups,
-            dropout=dropout,
+            num_heads=lam_cfg.num_heads,
+            d_model=lam_cfg.d_model,
+            num_layers=lam_cfg.num_layers,
+            d_linear=lam_cfg.d_linear,
+            num_discrete_actions=lam_cfg.num_discrete_actions,
+            codebook_dim=lam_cfg.codebook_dim,
+            patch_size=lam_cfg.patch_size,
+            frame_height=lam_cfg.frame_height,
+            frame_width=lam_cfg.frame_width,
+            num_frames=lam_cfg.num_frames,
+            num_linear_layers=lam_cfg.num_linear_layers,
+            num_groups=lam_cfg.num_groups,
+            dropout=lam_cfg.dropout,
         )
-        self.beta = beta
+        self.beta = lam_cfg.beta
         self.example_clip = None
         self.example_recon = None
 
