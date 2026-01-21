@@ -32,15 +32,21 @@ def run(cfg: Config) -> None:
     logger.info("Train/val batch size: %s", tc.batch_size)
 
     tc.shard_dir.mkdir(parents=True, exist_ok=True)
+    
+    logger.info("Loading ProcgenShardDataset from %s", tc.shard_dir)
     shard_dataset = ProcgenShardDataset(tc.shard_dir, normalize=True)
+    logger.info("Loaded dataset with %d samples", len(shard_dataset))
+
     train_size = int(tc.train_ratio * len(shard_dataset))
     val_size = len(shard_dataset) - train_size
+    logger.info("Splitting dataset: %d train, %d val", train_size, val_size)
     train_dataset, val_dataset = random_split(
         shard_dataset,
         [train_size, val_size],
         generator=torch.Generator().manual_seed(42),
     )
 
+    logger.info("Creating train and validation dataloaders")
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=tc.batch_size,
@@ -55,6 +61,9 @@ def run(cfg: Config) -> None:
         num_workers=tc.num_workers,
         pin_memory=tc.pin_memory,
     )
+
+    logger.info("Dataloaders created: %d training batches, %d validation batches",
+                len(train_dataloader), len(val_dataloader))
 
     if is_rank_zero():
         wandb_logger = WandbLogger(project="spacetime", config=asdict(lam_cfg))

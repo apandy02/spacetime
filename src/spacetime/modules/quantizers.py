@@ -9,8 +9,8 @@ import torch.nn.functional as F
 class QuantizerType(Enum):
     """Quantizer type enum"""
 
-    VANILLA = "vanilla"
-    EMA = "ema"
+    VANILLA = "VANILLA"
+    EMA = "EMA"
 
 
 class EMAVectorQuantizer(nn.Module):

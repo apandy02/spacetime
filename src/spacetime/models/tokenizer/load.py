@@ -7,6 +7,7 @@ import torch
 import yaml
 
 from spacetime.models.tokenizer.config import Hyperparameters
+from spacetime.modules.quantizers import QuantizerType
 from spacetime.models.tokenizer.model import VQTokenizer
 
 
@@ -46,6 +47,8 @@ def load_pretrained_tokenizer_config(wandb_path: str | Path) -> Hyperparameters:
     for key, value in model_cfg.items():
         setattr(cfg.model, key, value)
     for key, value in quant_cfg.items():
+        if key == "type":
+            value = _coerce_quantizer_type(value)
         setattr(cfg.quantizer, key, value)
     for key, value in beta_cfg.items():
         setattr(cfg.beta, key, value)
@@ -54,6 +57,18 @@ def load_pretrained_tokenizer_config(wandb_path: str | Path) -> Hyperparameters:
     for key, value in loss_cfg.items():
         setattr(cfg.loss, key, value)
     return cfg
+
+
+def _coerce_quantizer_type(value: Any) -> QuantizerType:
+    if isinstance(value, QuantizerType):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        try:
+            return QuantizerType(normalized)
+        except ValueError as exc:
+            raise ValueError(f"Invalid quantizer type: {value}") from exc
+    raise ValueError(f"Invalid quantizer type: {value}")
 
 
 def _unwrap_wandb_values(data: Any) -> Any:
