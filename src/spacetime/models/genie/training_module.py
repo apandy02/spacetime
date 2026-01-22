@@ -100,9 +100,6 @@ class GenieTrainingModule(L.LightningModule):
             is_training=True,
         )
 
-        if batch_idx == 0:
-            self.example_clip = x[:1].detach().cpu()
-            self.example_recon = genie_output.lam_reconstruction[:1].detach().cpu()
         return total_loss
 
     def validation_step(self, batch, batch_idx):
@@ -142,6 +139,8 @@ class GenieTrainingModule(L.LightningModule):
         with torch.no_grad():
             lpips_val = compute_lpips_loss(self.lpips_metric, genie_output.lam_reconstruction, x)
             if batch_idx == 0:
+                self.example_clip = x[:1].detach().cpu()
+                self.example_recon = genie_output.lam_reconstruction[:1].detach().cpu()
                 pred_indices = genie_output.output_tokens.argmax(dim=-1)
                 self.example_dynamics_recon = (
                     self.tokenizer.decode_indices(pred_indices[:1]).detach().cpu()
@@ -161,15 +160,22 @@ class GenieTrainingModule(L.LightningModule):
         clip = (self.example_clip.clamp(0, 1) * 255).to(torch.uint8)
         # Log video to wandb if available
         wandb_logger = self._get_wandb_logger()
-        if self.example_dynamics_recon is not None:
+        if wandb_logger is not None and self.example_recon is not None:
+            lam_recon = (self.example_recon.clamp(0, 1) * 255).to(torch.uint8)
+            lam_video = torch.cat([clip, lam_recon], dim=4)
+            lam_video = lam_video.squeeze(0).permute(1, 0, 2, 3)
+            wandb_logger.experiment.log(
+                {"lam_video": wandb.Video(lam_video, fps=4, format="mp4")},
+                step=self.global_step,
+            )
+        if wandb_logger is not None and self.example_dynamics_recon is not None:
             dyn_recon = (self.example_dynamics_recon.clamp(0, 1) * 255).to(torch.uint8)
             dyn_video = torch.cat([clip, dyn_recon], dim=4)
             dyn_video = dyn_video.squeeze(0).permute(1, 0, 2, 3)
-            if wandb_logger is not None:
-                wandb_logger.experiment.log(
-                    {"dynamics_video": wandb.Video(dyn_video, fps=4, format="mp4")},
-                    step=self.global_step,
-                )
+            wandb_logger.experiment.log(
+                {"dynamics_video": wandb.Video(dyn_video, fps=4, format="mp4")},
+                step=self.global_step,
+            )
         self.example_clip = None
         self.example_recon = None
         self.example_dynamics_recon = None
