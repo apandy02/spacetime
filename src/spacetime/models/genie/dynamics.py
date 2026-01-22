@@ -86,6 +86,10 @@ class DynamicsModel(nn.Module):
         forward pass for maskgit based dynamics model -- implements the maskgit forward pass minus 
         iterative demasking
         """
+        if tokens.shape[:3] != actions.shape[:3]:
+            raise ValueError(
+                f"Token/action shape mismatch: tokens {tokens.shape[:3]} vs actions {actions.shape[:3]}"
+            )
         tokens = self.token_projector(tokens)
         actions = self.action_projector(actions)
 

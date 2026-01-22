@@ -16,10 +16,10 @@ class LamConfig:
     d_linear: int = 1536
     num_discrete_actions: int = 1024
     codebook_dim: int = 128
-    patch_size: int = 8
-    frame_height: int = 224
-    frame_width: int = 224
-    num_frames: int = 8
+    patch_size: int = 4
+    frame_height: int = 64
+    frame_width: int = 64
+    num_frames: int = 16
     num_linear_layers: int = 2
     num_groups: int = 8
     dropout: float = 0.1

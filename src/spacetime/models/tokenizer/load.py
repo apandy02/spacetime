@@ -23,11 +23,17 @@ def load_pretrained_tokenizer_from_checkpoint(
     cfg = load_pretrained_tokenizer_config(wandb_path)
     checkpoint = torch.load(checkpoint_path, map_location=map_location)
     state_dict = checkpoint.get("state_dict", checkpoint)
-    model_state = {
-        key.replace("model.", "", 1): value
-        for key, value in state_dict.items()
-        if key.startswith("model.")
-    }
+    model_state = {}
+    for key, value in state_dict.items():
+        if key.startswith("model._orig_mod."):
+            new_key = key.replace("model._orig_mod.", "", 1)
+        elif key.startswith("model."):
+            new_key = key.replace("model.", "", 1)
+        elif key.startswith("_orig_mod."):
+            new_key = key.replace("_orig_mod.", "", 1)
+        else:
+            continue
+        model_state[new_key] = value
     model = VQTokenizer(cfg)
     model.load_state_dict(model_state, strict=True)
     model.eval()

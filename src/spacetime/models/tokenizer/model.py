@@ -26,6 +26,13 @@ class VQTokenizer(nn.Module):
         super().__init__()
         model_cfg = cfg.model
         quant_cfg = cfg.quantizer
+        if isinstance(quant_cfg.type, str):  # bit of a hack: TODO: make quantizer config handling more robust 
+            try:
+                quant_cfg.type = QuantizerType(quant_cfg.type.strip().lower())
+            except ValueError as exc:
+                raise ValueError(f"Invalid quantizer type: {quant_cfg.type}") from exc
+        elif not isinstance(quant_cfg.type, QuantizerType):
+            raise ValueError(f"Invalid quantizer type: {quant_cfg.type}")
 
         self.patch_size = model_cfg.patch_size
         self.frame_height = model_cfg.frame_height
@@ -74,7 +81,7 @@ class VQTokenizer(nn.Module):
                 dead_code_noise=quant_cfg.dead_code_noise,
             )
         elif quant_cfg.type == QuantizerType.VANILLA:
-            self.vector_quantizer = VanillaVectorQuantizer(
+            self.no  = VanillaVectorQuantizer(
                 quant_cfg.codebook_size, quant_cfg.codebook_dim
             )
         else:
