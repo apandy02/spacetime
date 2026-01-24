@@ -9,6 +9,7 @@ import wandb
 from spacetime.models.tokenizer.config import Hyperparameters
 from spacetime.models.tokenizer.model import VQTokenizer
 from spacetime.modules.quantizers import QuantizerType
+from spacetime.utils.optimizers import ParamGroupConfig, build_optimizer_with_schedule
 from spacetime.utils.vq_losses import (compute_entropy_loss,
                                        compute_lpips_loss, compute_vq_losses)
 
@@ -57,38 +58,31 @@ class VQTokenizerModule(L.LightningModule):
 
         opt_cfg = self.cfg.optimizer
         param_groups = [
-            {"params": main_params, "lr": opt_cfg.lr},
+            ParamGroupConfig(
+                params=main_params,
+                lr=opt_cfg.lr,
+                warmup_steps=opt_cfg.warmup_steps,
+                min_lr_ratio=0.0,  # Decay to 0
+            ),
         ]
         if quant_params:
-            param_groups.append({"params": quant_params, "lr": opt_cfg.lr_quant})
+            param_groups.append(
+                ParamGroupConfig(
+                    params=quant_params,
+                    lr=opt_cfg.lr_quant,
+                    warmup_steps=opt_cfg.warmup_steps,
+                    min_lr_ratio=0.0,  # Decay to 0
+                )
+            )
 
-        optimizer = torch.optim.AdamW(
-            param_groups,
+        total_steps = self.total_steps if self.total_steps is not None else opt_cfg.warmup_steps
+
+        return build_optimizer_with_schedule(
+            param_groups=param_groups,
+            total_steps=total_steps,
             betas=opt_cfg.betas,
             weight_decay=opt_cfg.weight_decay,
         )
-
-        total_steps = self.total_steps
-        if total_steps is None:
-            total_steps = opt_cfg.warmup_steps
-
-        def warmup_cosine_lambda(step):
-            if opt_cfg.warmup_steps > 0 and step < opt_cfg.warmup_steps:
-                return min(1.0, (step + 1) / opt_cfg.warmup_steps)
-            if total_steps <= opt_cfg.warmup_steps:
-                return 1.0
-            progress = (step - opt_cfg.warmup_steps) / (total_steps - opt_cfg.warmup_steps)
-            return 0.5 * (1.0 + math.cos(math.pi * min(1.0, progress)))
-
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_cosine_lambda)
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "step",
-                "frequency": 1,
-            },
-        }
 
     def training_step(self, batch, batch_idx):
         """

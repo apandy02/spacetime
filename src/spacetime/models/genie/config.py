@@ -10,12 +10,12 @@ class LamConfig:
     Latent action model (LAM) architecture and loss settings.
     """
 
-    num_heads: int = 4
-    d_model: int = 384
-    num_layers: int = 2
-    d_linear: int = 1536
-    num_discrete_actions: int = 1024
-    codebook_dim: int = 128
+    num_heads: int = 8
+    d_model: int = 512
+    num_layers: int = 8
+    d_linear: int = 2048
+    num_discrete_actions: int = 6
+    codebook_dim: int = 32
     patch_size: int = 4
     frame_height: int = 64
     frame_width: int = 64
@@ -39,12 +39,14 @@ class DynamicsConfig:
 
     n_heads: int = 8
     d_model: int = 512
-    n_layers: int = 6
+    n_layers: int = 12
     d_linear: int = 2048
     n_linear_layers: int = 2
     n_groups: int = 8
     dropout: float = 0.1
     p_sample: float = 0.2
+    sampling_temperature: float = 1.0
+    maskgit_steps: int = 25
 
 
 @dataclass
@@ -63,6 +65,19 @@ class TrainingConfig:
 
 
 @dataclass
+class OptimizerConfig:
+    """
+    AdamW optimizer and scheduler settings.
+    """
+
+    max_lr: float = 3e-5
+    min_lr: float = 3e-6
+    betas: tuple[float, float] = (0.9, 0.9)
+    weight_decay: float = 1e-4
+    warmup_steps: int = 5_000
+
+
+@dataclass
 class Hyperparameters:
     """
     Model hyperparameters, grouped by subsystem.
@@ -70,6 +85,7 @@ class Hyperparameters:
 
     lam: LamConfig = field(default_factory=LamConfig)
     dynamics: DynamicsConfig = field(default_factory=DynamicsConfig)
+    optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     lambda_reconstruction: float = 0.01
 
 

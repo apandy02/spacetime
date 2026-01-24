@@ -2,6 +2,7 @@ from typing import Any, Tuple
 
 import lightning as L
 import lpips
+import math
 import torch
 import torch.nn.functional as F
 from lightning.pytorch.loggers import WandbLogger
@@ -10,6 +11,7 @@ import wandb
 from spacetime.models.genie.config import Config
 from spacetime.models.genie.model import GenieModel
 from spacetime.models.tokenizer.load import load_pretrained_tokenizer_from_checkpoint
+from spacetime.utils.optimizers import ParamGroupConfig, build_optimizer_with_schedule
 from spacetime.utils.vq_losses import compute_lpips_loss, compute_vq_losses
 
 
@@ -51,7 +53,24 @@ class GenieTrainingModule(L.LightningModule):
         return self.genie_model(inputs)
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.genie_model.parameters(), lr=3e-4)
+        opt_cfg = self.cfg.hparams.optimizer
+        total_steps = getattr(self.trainer, "estimated_stepping_batches", None)
+
+        param_groups = [
+            ParamGroupConfig(
+                params=self.genie_model.parameters(),
+                lr=opt_cfg.max_lr,
+                warmup_steps=min(opt_cfg.warmup_steps, total_steps) if total_steps else 0,
+                min_lr_ratio=opt_cfg.min_lr / opt_cfg.max_lr,
+            )
+        ]
+
+        return build_optimizer_with_schedule(
+            param_groups=param_groups,
+            total_steps=total_steps,
+            betas=opt_cfg.betas,
+            weight_decay=opt_cfg.weight_decay,
+        )
 
     def training_step(self, batch: Tuple[torch.Tensor, Any], batch_idx: int) -> torch.Tensor:
         """
