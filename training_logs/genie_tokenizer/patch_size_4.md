@@ -46,6 +46,7 @@ We use AdamW as our optimizer, with default betas 0.9, 0.9 (unless mentioned oth
 3. **Dead-code threshold trades quality for usage** — bumping to 1e-3 (P4-E06) keeps usage high but drops perplexity, suggesting more skewed code usage despite strong metrics.
 4. **EMA decay sensitivity** — higher decay (0.99 in P4-E07) degrades LPIPS/recon while keeping perplexity high.
 5. **LR sweep down to 7e-5 underperforms** — P4-E05 is substantially worse than 3e-4, so lower LR is not automatically better at patch size 4.
+6. **10M ordering matches 1M ordering** — the run with higher perplexity (P4-E07/decay 0.99) also has worse LPIPS, consistent with the 1M-scale differences vs P4-E04.
 
 ## Planned 10M Run
 
@@ -55,6 +56,15 @@ For the 10M-step tokenizer run, the candidate configurations are:
 
 If either run shows instability or collapse at 10M, we can do a small sweep at that scale; the
 point of earlier sweeps was to conserve compute.
+
+---
+
+## 10M Step Runs
+
+| Run ID | Config | Min Val LPIPS | Min Val Recon | Last Val Usage | Last Val Perplexity | Duration | Status | Notes |
+|--------|--------|---------------|---------------|----------------|---------------------|----------|--------|-------|
+| i9o9pcjj | P4-E04 @ 10M (β 0.03→0.01, decay 0.985) | 0.00196 | 4.66e-05 | 0.99826 | 421.6 | 134.95h | Completed | Best of the 10M runs. |
+| 61zybkcy | P4-E07 @ 10M (β 0.05→0.01, decay 0.99) | 0.00319 | 9.15e-05 | 0.99830 | 551.4 | 136.00h | Completed | Higher perplexity and worse LPIPS vs i9o9pcjj. |
 
 ---
 
