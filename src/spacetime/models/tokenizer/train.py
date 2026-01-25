@@ -1,17 +1,17 @@
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import lightning as L
 import torch
 import tyro
-from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from torch.utils.data import DataLoader, random_split
 
 from spacetime.models.tokenizer.config import TokenizerConfig, TrainingConfig
 from spacetime.models.tokenizer.training_module import VQTokenizerModule
-from spacetime.utils import (get_logger, is_rank_zero,
+from spacetime.utils import (get_logger,
                              maybe_disable_wandb_for_non_zero_ranks,
-                             maybe_set_wandb_sandbox_key)
+                             maybe_set_wandb_sandbox_key,
+                             setup_wandb_csv_loggers)
 from spacetime.utils.data import ProcgenShardDataset
 
 logger = get_logger("spacetime.tokenizer")
@@ -74,17 +74,11 @@ def setup_loggers(cfg: Config) -> list | bool:
     """
     hp = cfg.hparams
     tc = cfg.training
-    if is_rank_zero():
-        wandb_config = {
-            "effective_batch_size": tc.batch_size * tc.accumulate_grad_batches,
-            **asdict(tc),
-            **asdict(hp),
-        }
-        wandb_logger = WandbLogger(project="genie", config=wandb_config)
-        run_id = wandb_logger.experiment.id
-        csv_logger = CSVLogger(save_dir="lightning_logs", name=run_id, flush_logs_every_n_steps=1)
-        return [csv_logger, wandb_logger]
-    return False
+    return setup_wandb_csv_loggers(
+        project="genie",
+        config_parts=[tc, hp],
+        effective_batch_size=tc.batch_size * tc.accumulate_grad_batches,
+    )
 
 
 def run(cfg: Config) -> None:

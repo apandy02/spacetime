@@ -1,8 +1,8 @@
+import math
 from typing import Any, Tuple
 
 import lightning as L
 import lpips
-import math
 import torch
 import torch.nn.functional as F
 from lightning.pytorch.loggers import WandbLogger
@@ -10,8 +10,10 @@ from lightning.pytorch.loggers import WandbLogger
 import wandb
 from spacetime.models.genie.config import Config
 from spacetime.models.genie.model import GenieModel
-from spacetime.models.tokenizer.load import load_pretrained_tokenizer_from_checkpoint
-from spacetime.utils.optimizers import ParamGroupConfig, build_optimizer_with_schedule
+from spacetime.models.tokenizer.load import \
+    load_pretrained_tokenizer_from_checkpoint
+from spacetime.utils.optimizers import (ParamGroupConfig,
+                                        build_optimizer_with_schedule)
 from spacetime.utils.vq_losses import compute_lpips_loss, compute_vq_losses
 
 

@@ -7,8 +7,8 @@ import torch
 import yaml
 
 from spacetime.models.tokenizer.config import Hyperparameters
-from spacetime.modules.quantizers import QuantizerType
 from spacetime.models.tokenizer.model import VQTokenizer
+from spacetime.modules.quantizers import QuantizerType
 
 
 def load_pretrained_tokenizer_from_checkpoint(

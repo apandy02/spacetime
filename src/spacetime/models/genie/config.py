@@ -60,8 +60,14 @@ class TrainingConfig:
     batch_size: int = 16
     num_workers: int = 8
     pin_memory: bool = True
+    persistent_workers: bool = True
+    prefetch_factor: int = 2
     max_epochs: int = 10
-    precision: int = 16
+    precision: str = "bf16-mixed"
+    matmul_precision: str = "high"
+    compile_model: bool = False
+    compile_backend: str = "inductor"
+    compile_mode: str = "default"
 
 
 @dataclass
