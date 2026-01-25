@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 from spacetime.models.genie.config import LamConfig
 from spacetime.models.tokenizer.model import VQVAEVideoEncoder
@@ -44,6 +45,7 @@ class LatentActionModel(nn.Module):
             dropout=lam_cfg.dropout,
             is_causal=False,
             mask=build_anti_causal_mask,
+            gradient_checkpointing=lam_cfg.gradient_checkpointing,
         )
 
         if lam_cfg.quantizer_type == QuantizerType.EMA:
@@ -72,6 +74,7 @@ class LatentActionModel(nn.Module):
             num_linear_layers=lam_cfg.num_linear_layers,
             num_groups=lam_cfg.num_groups,
             dropout=lam_cfg.dropout,
+            gradient_checkpointing=lam_cfg.gradient_checkpointing,
         )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -121,8 +124,10 @@ class LatentActionDecoder(nn.Module):
         num_linear_layers: int = 2,
         num_groups: int = 8,
         dropout: float = 0.1,
+        gradient_checkpointing: bool = False,
     ):
         super(LatentActionDecoder, self).__init__()
+        self.gradient_checkpointing = gradient_checkpointing
         self.d_model_projection = nn.Linear(codebook_dim, d_model)
         self.st_decoder = nn.ModuleList(
             [
@@ -191,7 +196,10 @@ class LatentActionDecoder(nn.Module):
         )  # [a_1, f_1, a_2, f_2, ..., a_T, f_T] -> [B, 2T, N, D]
 
         for layer in self.st_decoder:
-            x = layer(x)
+            if self.gradient_checkpointing and self.training:
+                x = checkpoint(layer, x, use_reentrant=False)
+            else:
+                x = layer(x)
         x = self.layer_norm(x)
 
         # Extract only frame positions (indices 1, 3, 5, ... i.e., odd indices)

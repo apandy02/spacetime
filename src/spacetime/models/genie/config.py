@@ -23,6 +23,7 @@ class LamConfig:
     num_linear_layers: int = 2
     num_groups: int = 8
     dropout: float = 0.1
+    gradient_checkpointing: bool = False
     beta: float = 0.25
     quantizer_type: QuantizerType = QuantizerType.VANILLA
     quantizer_decay: float = 0.985
@@ -44,6 +45,7 @@ class DynamicsConfig:
     n_linear_layers: int = 2
     n_groups: int = 8
     dropout: float = 0.1
+    gradient_checkpointing: bool = False
     p_sample: float = 0.2
     sampling_temperature: float = 1.0
     maskgit_steps: int = 25

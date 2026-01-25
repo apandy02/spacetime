@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 from spacetime.models.genie.config import DynamicsConfig, LamConfig
 from spacetime.models.tokenizer.config import TokenizerConfig
@@ -51,6 +52,7 @@ class DynamicsModel(nn.Module):
         self.n_frames = n_frames
         self.d_model = d_model
         self.p_sample = p_sample
+        self.gradient_checkpointing = dynamics_cfg.gradient_checkpointing
         self.action_codebook_size = action_codebook_size
         self.action_dim = action_dim
         self.token_codebook_size = token_codebook_size
@@ -98,7 +100,10 @@ class DynamicsModel(nn.Module):
         tokens = self._mask(tokens)
 
         for layer in self.st_decoder:
-            tokens = layer(tokens)
+            if self.gradient_checkpointing and self.training:
+                tokens = checkpoint(layer, tokens, use_reentrant=False)
+            else:
+                tokens = layer(tokens)
 
         tokens = self.layer_norm(tokens)
         return self.output_projector(tokens)
