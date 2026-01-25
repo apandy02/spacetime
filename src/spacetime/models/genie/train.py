@@ -1,6 +1,7 @@
 """
 trainer module for Genie: Generative Interactive Environments
 """
+
 import lightning as L
 import torch
 import tyro
@@ -8,10 +9,12 @@ from torch.utils.data import DataLoader, random_split
 
 from spacetime.models.genie.config import Config
 from spacetime.models.genie.training_module import GenieTrainingModule
-from spacetime.utils import (get_logger,
-                             maybe_disable_wandb_for_non_zero_ranks,
-                             maybe_set_wandb_sandbox_key,
-                             setup_wandb_csv_loggers)
+from spacetime.utils import (
+    get_logger,
+    maybe_disable_wandb_for_non_zero_ranks,
+    maybe_set_wandb_sandbox_key,
+    setup_wandb_csv_loggers,
+)
 from spacetime.utils.data import ProcgenShardDataset
 
 logger = get_logger("spacetime.genie")
@@ -41,7 +44,7 @@ def run(cfg: Config) -> None:
     logger.info("Train/val batch size: %s", tc.batch_size)
 
     tc.shard_dir.mkdir(parents=True, exist_ok=True)
-    
+
     logger.info("Loading ProcgenShardDataset from %s", tc.shard_dir)
     shard_dataset = ProcgenShardDataset(tc.shard_dir, normalize=True)
     logger.info("Loaded dataset with %d samples", len(shard_dataset))
@@ -76,8 +79,11 @@ def run(cfg: Config) -> None:
         **dataloader_kwargs,
     )
 
-    logger.info("Dataloaders created: %d training batches, %d validation batches",
-                len(train_dataloader), len(val_dataloader))
+    logger.info(
+        "Dataloaders created: %d training batches, %d validation batches",
+        len(train_dataloader),
+        len(val_dataloader),
+    )
 
     loggers = setup_loggers(cfg)
 
@@ -89,9 +95,7 @@ def run(cfg: Config) -> None:
             mode=tc.compile_mode,
         )
 
-    logger.info(
-        "Initializing trainer (max_epochs=%s, precision=%s)", tc.max_epochs, tc.precision
-    )
+    logger.info("Initializing trainer (max_epochs=%s, precision=%s)", tc.max_epochs, tc.precision)
     trainer = L.Trainer(
         max_epochs=tc.max_epochs,
         precision=tc.precision,

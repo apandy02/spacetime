@@ -100,8 +100,8 @@ class Config:
     """
     Top-level experiment config.
     """
+
     tokenizer_checkpoint: Path
     tokenizer_wandb_path: Path
     training: TrainingConfig = field(default_factory=TrainingConfig)
     hparams: Hyperparameters = field(default_factory=Hyperparameters)
-    

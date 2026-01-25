@@ -9,10 +9,8 @@ import wandb
 from spacetime.models.tokenizer.config import Hyperparameters
 from spacetime.models.tokenizer.model import VQTokenizer
 from spacetime.modules.quantizers import QuantizerType
-from spacetime.utils.optimizers import (ParamGroupConfig,
-                                        build_optimizer_with_schedule)
-from spacetime.utils.vq_losses import (compute_entropy_loss,
-                                       compute_lpips_loss, compute_vq_losses)
+from spacetime.utils.optimizers import ParamGroupConfig, build_optimizer_with_schedule
+from spacetime.utils.vq_losses import compute_entropy_loss, compute_lpips_loss, compute_vq_losses
 
 
 class VQTokenizerModule(L.LightningModule):

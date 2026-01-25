@@ -10,10 +10,8 @@ from lightning.pytorch.loggers import WandbLogger
 import wandb
 from spacetime.models.genie.config import Config
 from spacetime.models.genie.model import GenieModel
-from spacetime.models.tokenizer.load import \
-    load_pretrained_tokenizer_from_checkpoint
-from spacetime.utils.optimizers import (ParamGroupConfig,
-                                        build_optimizer_with_schedule)
+from spacetime.models.tokenizer.load import load_pretrained_tokenizer_from_checkpoint
+from spacetime.utils.optimizers import ParamGroupConfig, build_optimizer_with_schedule
 from spacetime.utils.vq_losses import compute_lpips_loss, compute_vq_losses
 
 
@@ -82,7 +80,7 @@ class GenieTrainingModule(L.LightningModule):
 
         this will return the maskgit output + the lam vq vae decoder and encoder outputs
 
-        we have a dynamics model loss (cross entropy on token indices) + the vq vae losses 
+        we have a dynamics model loss (cross entropy on token indices) + the vq vae losses
         (reconstruction and commitment -- abstracted away by the compute_vq_losses function)
 
         Args:
@@ -211,7 +209,7 @@ class GenieTrainingModule(L.LightningModule):
                 if isinstance(logger, WandbLogger):
                     return logger
         return None
-    
+
     def _compute_dynamics_loss(
         self, output_logits: torch.Tensor, target_indices: torch.Tensor
     ) -> torch.Tensor:

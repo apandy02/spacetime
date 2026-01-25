@@ -5,8 +5,7 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
 from spacetime.models.tokenizer.config import TokenizerConfig
-from spacetime.modules.quantizers import (EMAVectorQuantizer, QuantizerType,
-                                          VanillaVectorQuantizer)
+from spacetime.modules.quantizers import EMAVectorQuantizer, QuantizerType, VanillaVectorQuantizer
 from spacetime.modules.transformer import STTransformerLayer
 from spacetime.modules.utils import patchify, unpatchify
 
@@ -26,7 +25,9 @@ class VQTokenizer(nn.Module):
         super().__init__()
         model_cfg = cfg.model
         quant_cfg = cfg.quantizer
-        if isinstance(quant_cfg.type, str):  # bit of a hack: TODO: make quantizer config handling more robust 
+        if isinstance(
+            quant_cfg.type, str
+        ):  # bit of a hack: TODO: make quantizer config handling more robust
             try:
                 quant_cfg.type = QuantizerType(quant_cfg.type.strip().lower())
             except ValueError as exc:
@@ -81,9 +82,7 @@ class VQTokenizer(nn.Module):
                 dead_code_noise=quant_cfg.dead_code_noise,
             )
         elif quant_cfg.type == QuantizerType.VANILLA:
-            self.no  = VanillaVectorQuantizer(
-                quant_cfg.codebook_size, quant_cfg.codebook_dim
-            )
+            self.no = VanillaVectorQuantizer(quant_cfg.codebook_size, quant_cfg.codebook_dim)
         else:
             raise ValueError(f"Invalid quantizer type: {quant_cfg.type}")
 

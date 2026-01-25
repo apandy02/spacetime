@@ -3,11 +3,9 @@ from torch import nn
 
 from spacetime.models.genie.config import LamConfig
 from spacetime.models.tokenizer.model import VQVAEVideoEncoder
-from spacetime.modules.quantizers import (EMAVectorQuantizer, QuantizerType,
-                                          VanillaVectorQuantizer)
+from spacetime.modules.quantizers import EMAVectorQuantizer, QuantizerType, VanillaVectorQuantizer
 from spacetime.modules.transformer import STTransformerLayer
-from spacetime.modules.utils import (build_anti_causal_mask, build_causal_mask,
-                                     patchify, unpatchify)
+from spacetime.modules.utils import build_anti_causal_mask, build_causal_mask, patchify, unpatchify
 
 
 class LatentActionModel(nn.Module):

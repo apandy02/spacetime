@@ -38,9 +38,7 @@ def build_optimizer_with_schedule(
     if not param_groups:
         raise ValueError("Must provide at least one parameter group")
 
-    optimizer_param_groups = [
-        {"params": list(cfg.params), "lr": cfg.lr} for cfg in param_groups
-    ]
+    optimizer_param_groups = [{"params": list(cfg.params), "lr": cfg.lr} for cfg in param_groups]
 
     optimizer = torch.optim.AdamW(
         optimizer_param_groups,
