@@ -77,7 +77,7 @@ def setup_loggers(cfg: Config) -> list | bool:
     hp = cfg.hparams
     tc = cfg.training
     return setup_wandb_csv_loggers(
-        project="genie",
+        project="genie tokenizer",
         config_parts=[tc, hp],
         effective_batch_size=tc.batch_size * tc.accumulate_grad_batches,
     )
