@@ -105,8 +105,9 @@ class GenieTrainingModule(L.LightningModule):
             lpips_weight=0.0,
             lpips_metric=self.lpips_metric,
         )
+        # output_tokens predicts frames 2:T, so compare with token_indices[:, 1:]
         dynamics_loss = self._compute_dynamics_loss(
-            genie_output.output_tokens, genie_output.token_indices
+            genie_output.output_tokens, genie_output.token_indices[:, 1:]
         )
         total_loss = (self.lambda_reconstruction * loss) + dynamics_loss
 
@@ -141,8 +142,9 @@ class GenieTrainingModule(L.LightningModule):
             lpips_weight=0.0,
             lpips_metric=self.lpips_metric,
         )
+        # output_tokens predicts frames 2:T, so compare with token_indices[:, 1:]
         dynamics_loss = self._compute_dynamics_loss(
-            genie_output.output_tokens, genie_output.token_indices
+            genie_output.output_tokens, genie_output.token_indices[:, 1:]
         )
         total_loss = (self.lambda_reconstruction * loss) + dynamics_loss
 
@@ -160,6 +162,7 @@ class GenieTrainingModule(L.LightningModule):
             if batch_idx == 0:
                 self.example_clip = x[:1].detach().cpu()
                 self.example_recon = genie_output.lam_reconstruction[:1].detach().cpu()
+                # output_tokens has shape [B, T-1, N, vocab], predictions for frames 2:T
                 pred_indices = genie_output.output_tokens.argmax(dim=-1)
                 self.example_dynamics_recon = (
                     self.tokenizer.decode_indices(pred_indices[:1]).detach().cpu()

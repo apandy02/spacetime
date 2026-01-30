@@ -78,7 +78,8 @@ class GenieModel(nn.Module):
             token_embeddings, token_indices, _ = self.tokenizer.tokenize(x)
 
         lam_reconstruction, z_e, actions = self.lam(x)
-        output_tokens = self.dynamics(token_embeddings, actions)
+        # Use frames 1:T-1 as input to predict frames 2:T
+        output_tokens = self.dynamics(token_embeddings[:, :-1], actions[:, :-1])
 
         return GenieOutput(
             lam_reconstruction=lam_reconstruction,
