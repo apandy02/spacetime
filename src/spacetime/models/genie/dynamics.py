@@ -110,16 +110,23 @@ class DynamicsModel(nn.Module):
 
     def _mask(self, tokens: torch.Tensor) -> torch.Tensor:
         """
-        Bernoulli masking for frames 2 onwards. Frame 1 is never masked
-        as it serves as the conditioning context.
+        Bernoulli masking with rate sampled uniformly from [0.5, 1.0].
+        Frame 1 is never masked as it serves as conditioning context.
         """
         batch_size, n_frames, n_tokens, _ = tokens.shape
+        # Sample masking rate uniformly from [0.5, 1.0] for this batch
+        if self.training:
+            mask_rate = torch.empty(1, device=tokens.device).uniform_(0.5, 1.0).item()
+        else:
+            # Use fixed rate during validation
+            mask_rate = self.p_sample
+
         a = torch.empty(
             (batch_size, n_frames, n_tokens),
             device=tokens.device,
             dtype=tokens.dtype,
         ).uniform_(0, 1)
-        mask = a < self.p_sample
+        mask = a < mask_rate
         mask[:, 0, :] = False  # never mask frame 1
         tokens = torch.where(mask[..., None], self.mask_embed, tokens)
         return tokens
