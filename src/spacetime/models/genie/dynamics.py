@@ -95,7 +95,8 @@ class DynamicsModel(nn.Module):
         tokens = self.token_projector(tokens)
         actions = self.action_projector(actions)
 
-        tokens += self.pos_embed_space + self.pos_embed_time + actions
+        n_frames = tokens.shape[1]
+        tokens += self.pos_embed_space + self.pos_embed_time[:, :n_frames] + actions
 
         tokens = self._mask(tokens)
 
