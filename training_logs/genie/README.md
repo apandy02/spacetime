@@ -81,3 +81,4 @@ experiment defaults change.
 - try separate LAM/dynamics optimizers
 - mask ratio schedule vs fixed p_sample
 - dynamics temperature sweep
+- post-success: build latent-action → key mapping via one-step causal probe (latent index ↔ keyboard key) for control

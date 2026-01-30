@@ -110,7 +110,8 @@ class DynamicsModel(nn.Module):
 
     def _mask(self, tokens: torch.Tensor) -> torch.Tensor:
         """
-        Bernoulli masking
+        Bernoulli masking for frames 2 onwards. Frame 1 is never masked
+        as it serves as the conditioning context.
         """
         batch_size, n_frames, n_tokens, _ = tokens.shape
         a = torch.empty(
@@ -119,5 +120,6 @@ class DynamicsModel(nn.Module):
             dtype=tokens.dtype,
         ).uniform_(0, 1)
         mask = a < self.p_sample
+        mask[:, 0, :] = False  # never mask frame 1
         tokens = torch.where(mask[..., None], self.mask_embed, tokens)
         return tokens
