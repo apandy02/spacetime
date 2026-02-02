@@ -76,6 +76,8 @@ class GenieModel(nn.Module):
         """
         with torch.no_grad():
             token_embeddings, token_indices, _ = self.tokenizer.tokenize(x)
+            # TODO: handle index reshaping in tokenizer codebase
+            token_indices = token_indices.view(token_embeddings.shape[:-1])
 
         lam_reconstruction, z_e, actions = self.lam(x)
         output_tokens = self.dynamics(token_embeddings[:, :-1], actions[:, :-1].detach())
