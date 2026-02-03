@@ -15,6 +15,7 @@ class GenieOutput:
     lam_reconstruction: torch.Tensor
     z_e: torch.Tensor
     actions: torch.Tensor
+    action_indices: torch.Tensor
     output_tokens: torch.Tensor
     token_indices: torch.Tensor
     token_embeddings: torch.Tensor
@@ -79,13 +80,14 @@ class GenieModel(nn.Module):
             # TODO: handle index reshaping in tokenizer codebase
             token_indices = token_indices.view(token_embeddings.shape[:-1])
 
-        lam_reconstruction, z_e, actions = self.lam(x)
+        lam_reconstruction, z_e, actions, action_indices = self.lam(x)
         output_tokens = self.dynamics(token_embeddings[:, :-1], actions[:, :-1].detach())
 
         return GenieOutput(
             lam_reconstruction=lam_reconstruction,
             z_e=z_e,
             actions=actions,
+            action_indices=action_indices,
             output_tokens=output_tokens,
             token_indices=token_indices,
             token_embeddings=token_embeddings,

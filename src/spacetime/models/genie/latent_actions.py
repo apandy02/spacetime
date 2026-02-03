@@ -77,7 +77,9 @@ class LatentActionModel(nn.Module):
             gradient_checkpointing=lam_cfg.gradient_checkpointing,
         )
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass for the LatentActionModel (VAE with quantized latent actions).
         Takes as input:
@@ -86,12 +88,13 @@ class LatentActionModel(nn.Module):
             - frame_embeddings: [B, F, NUM_P, patch_dim], corresponding to the reconstructed frame patches
             - encoder_output: [B, F, NUM_P, D_model], corresponding to the encoded frame embeddings
             - action_codes: [B, F, NUM_P, D_codebook], corresponding to the quantized action codes
+            - action_indices: [B, F, NUM_P], corresponding to the codebook indices
         """
         x = patchify(x, self.patch_size)  # [B, F, NUM_P, DIM_P]
         frame_embeddings = self.d_model_projection(x)
         encoder_input = frame_embeddings + self.pos_embed_space + self.pos_embed_time
         encoder_output = self.anti_causal_encoder(encoder_input)
-        action_codes, _, z_e = self.vector_quantizer(encoder_output)
+        action_codes, action_indices, z_e = self.vector_quantizer(encoder_output)
 
         st_estimator_action_codes = z_e + (action_codes - z_e).detach()
         frame_reconstructions = self.decoder(
@@ -104,6 +107,7 @@ class LatentActionModel(nn.Module):
             unpatchify(frame_reconstructions, self.patch_size, self.n_patch_h, self.n_patch_w),
             z_e,
             action_codes,
+            action_indices,
         )
 
 

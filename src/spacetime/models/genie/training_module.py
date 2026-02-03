@@ -97,7 +97,7 @@ class GenieTrainingModule(L.LightningModule):
             x=x,
             z_e=genie_output.z_e,
             z_quantized=genie_output.actions,
-            indices=None,
+            indices=genie_output.action_indices,
             beta=self.lam_beta,
             quantizer_type=self.cfg.hparams.lam.quantizer_type,
             codebook_size=self.genie_model.lam.vector_quantizer.codebook_size,
@@ -118,6 +118,7 @@ class GenieTrainingModule(L.LightningModule):
             dynamics_loss,
             is_training=True,
         )
+        self._log_lam_codebook_usage(genie_output.action_indices, is_training=True)
 
         return total_loss
 
@@ -133,7 +134,7 @@ class GenieTrainingModule(L.LightningModule):
             x=x,
             z_e=genie_output.z_e,
             z_quantized=genie_output.actions,
-            indices=None,
+            indices=genie_output.action_indices,
             beta=self.lam_beta,
             quantizer_type=self.cfg.hparams.lam.quantizer_type,
             codebook_size=self.genie_model.lam.vector_quantizer.codebook_size,
@@ -154,6 +155,7 @@ class GenieTrainingModule(L.LightningModule):
             dynamics_loss,
             is_training=False,
         )
+        self._log_lam_codebook_usage(genie_output.action_indices, is_training=False)
 
         with torch.no_grad():
             lpips_val = compute_lpips_loss(self.lpips_metric, genie_output.lam_reconstruction, x)
@@ -279,3 +281,34 @@ class GenieTrainingModule(L.LightningModule):
                 logger=True,
                 sync_dist=not is_training,
             )
+
+    def _log_lam_codebook_usage(self, indices, is_training: bool) -> None:
+        if indices is None:
+            return
+
+        codebook_size = self.genie_model.lam.vector_quantizer.codebook_size
+        flat_indices = indices.reshape(-1)
+        counts = torch.bincount(flat_indices, minlength=codebook_size).float()
+        usage = (counts > 0).float().mean()
+        probs = counts / (counts.sum() + 1e-8)
+        perplexity = torch.exp(-(probs * (probs + 1e-8).log()).sum())
+
+        prefix = "train" if is_training else "val"
+        self.log(
+            f"{prefix}_lam_codebook_usage",
+            usage,
+            on_step=is_training,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+            sync_dist=not is_training,
+        )
+        self.log(
+            f"{prefix}_lam_codebook_perplexity",
+            perplexity,
+            on_step=is_training,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+            sync_dist=not is_training,
+        )
