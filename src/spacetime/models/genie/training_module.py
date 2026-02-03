@@ -161,9 +161,9 @@ class GenieTrainingModule(L.LightningModule):
                 self.example_clip = x[:1].detach().cpu()
                 self.example_recon = genie_output.lam_reconstruction[:1].detach().cpu()
                 pred_indices = genie_output.output_tokens.argmax(dim=-1)
-                self.example_dynamics_recon = (
-                    self.tokenizer.decode_indices(pred_indices[:1]).detach().cpu()
-                )
+                dyn_recon = self.tokenizer.decode_indices(pred_indices[:1]).detach().cpu()
+                first_frame = self.example_clip[:, :, :1]
+                self.example_dynamics_recon = torch.cat([first_frame, dyn_recon], dim=2)
         self.log("val_lpips", lpips_val, prog_bar=False, logger=True, sync_dist=True)
         return total_loss
 

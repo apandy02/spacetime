@@ -67,7 +67,7 @@ class DynamicsModel(nn.Module):
                     n_linear_layers,
                     n_groups,
                     dropout,
-                    mask=build_causal_mask,
+                    is_causal=True,
                 )
                 for _ in range(n_layers)
             ]
@@ -115,11 +115,10 @@ class DynamicsModel(nn.Module):
         Frame 1 is never masked as it serves as conditioning context.
         """
         batch_size, n_frames, n_tokens, _ = tokens.shape
-        # Sample masking rate uniformly from [0.5, 1.0] for this batch
+
         if self.training:
             mask_rate = torch.empty(1, device=tokens.device).uniform_(0.5, 1.0).item()
         else:
-            # Use fixed rate during validation
             mask_rate = self.p_sample
 
         a = torch.empty(
