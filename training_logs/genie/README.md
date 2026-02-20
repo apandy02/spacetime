@@ -48,36 +48,18 @@ experiment defaults change.
 
 ## All Experiments
 
-| Exp ID | Tokenizer | LAM (layers/heads/d_model/codes/dim) | Dynamics (layers/heads/d_model/steps/temp/p) | Loss Weights (lambda_recon, beta) | Min Val Dyn Loss | Min Val Recon | Min Val Commit | Min Val Total | Min Val LPIPS | Duration | Notes |
-|--------|-----------|--------------------------------------|---------------------------------------------|-----------------------------------|------------------|---------------|----------------|---------------|---------------|----------|-------|
-| 2sqwg4wo | i9o9pcjj (P4-E04) | 8/8/512/6/32 | 12/8/512/25/1.0/0.2 | 0.01, 0.25 | 0.1356 | 7.98e-05 | 2.81e-07 | 0.1356 | 0.00446 | Ongoing | bs=36, compile, grad_ckpt; val @ step 13888 |
-| kovejwoy | 61zybkcy (P4-E07) | 8/8/512/6/32 | 12/8/512/25/1.0/0.2 | 0.01, 0.25 | 0.1140 | 3.34e-05 | 2.63e-07 | 0.1140 | 0.00367 | Ongoing | bs=36, compile, grad_ckpt; val @ step 13888 |
-
----
-
-## Successful / Ongoing Runs
-
-| Exp ID | Tokenizer | Key Config | Min Val Dyn Loss | Min Val Recon | Min Val LPIPS | Duration | Status | Notes |
-|--------|-----------|------------|------------------|---------------|---------------|----------|--------|-------|
-| 2sqwg4wo | i9o9pcjj (P4-E04) | bs=36, compile, grad_ckpt | 0.1356 | 7.98e-05 | 0.00446 | Ongoing | Ongoing | val @ step 13888 |
-| kovejwoy | 61zybkcy (P4-E07) | bs=36, compile, grad_ckpt | 0.1140 | 3.34e-05 | 0.00367 | Ongoing | Ongoing | val @ step 13888 |
-
----
-
-## Key Findings
-
-1. TBD
-
----
-
-## Planned Runs
-
-- TBD
+| Exp ID | Tokenizer | LAM (layers/heads/d_model/codes/dim) | Dynamics (layers/heads/d_model/steps/temp/p) | Loss Weights (lambda_recon, beta) | Min Val Dyn Loss | LAM Perplexity | Min Val LPIPS | Epochs | Status | Notes |
+|--------|-----------|--------------------------------------|---------------------------------------------|-----------------------------------|------------------|----------------|---------------|--------|--------|-------|
+| 1v10p5qh | i9o9pcjj (P4-E04, ppl=421.6) | 8/8/512/6/32 | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | 0.757 | **1.0** ❌ | 0.00063 | 7/10 | Failed | Decoder could see target frame; codebook collapsed @ step ~200 |
+| zehhdgq5 | 61zybkcy (P4-E07, ppl=551.4) | 8/8/512/6/32 | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | 0.342 | **1.0** ❌ | 0.00066 | 7/10 | Failed | Decoder could see target frame; codebook collapsed @ step ~200 |
+| an9471sd | i9o9pcjj (P4-E04) | 8/8/512/6/32 | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | - | - | - | 0/10 | Running | Fixed: [f,a,f,a] ordering + predict from action positions |
+| TBD | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | - | - | - | - | Planned | Same fix + EMA quantizer |
 
 ---
 
 ## Ablations / Ideas to Try
 
+- EMA quantizer vs VANILLA for LAM codebook
 - try separate LAM/dynamics optimizers
 - mask ratio schedule vs fixed p_sample
 - dynamics temperature sweep
