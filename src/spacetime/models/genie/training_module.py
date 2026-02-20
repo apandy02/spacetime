@@ -31,6 +31,7 @@ class GenieTrainingModule(L.LightningModule):
         self.example_clip = None
         self.example_recon = None
         self.example_dynamics_recon = None
+        self.example_full_clip = None
 
         self.lpips_metric = lpips.LPIPS(net="vgg")
         self.lpips_metric.eval()
@@ -92,9 +93,10 @@ class GenieTrainingModule(L.LightningModule):
         """
         x, _ = batch
         genie_output = self(x)
+        # LAM predicts frames 2..T from frames 1..T-1, so target is x[:, :, 1:]
         loss, losses = compute_vq_losses(
             x_pred=genie_output.lam_reconstruction,
-            x=x,
+            x=x[:, :, 1:],
             z_e=genie_output.z_e,
             z_quantized=genie_output.actions,
             indices=genie_output.action_indices,
@@ -129,9 +131,11 @@ class GenieTrainingModule(L.LightningModule):
         """
         x, _ = batch
         genie_output = self(x)
+        # LAM predicts frames 2..T from frames 1..T-1, so target is x[:, :, 1:]
+        lam_target = x[:, :, 1:]
         loss, losses = compute_vq_losses(
             x_pred=genie_output.lam_reconstruction,
-            x=x,
+            x=lam_target,
             z_e=genie_output.z_e,
             z_quantized=genie_output.actions,
             indices=genie_output.action_indices,
@@ -158,13 +162,18 @@ class GenieTrainingModule(L.LightningModule):
         self._log_lam_codebook_usage(genie_output.action_indices, is_training=False)
 
         with torch.no_grad():
-            lpips_val = compute_lpips_loss(self.lpips_metric, genie_output.lam_reconstruction, x)
+            lpips_val = compute_lpips_loss(
+                self.lpips_metric, genie_output.lam_reconstruction, lam_target
+            )
             if batch_idx == 0:
-                self.example_clip = x[:1].detach().cpu()
+                # For LAM visualization: reconstructs frames 2..T, compare against lam_target
+                self.example_clip = lam_target[:1].detach().cpu()
                 self.example_recon = genie_output.lam_reconstruction[:1].detach().cpu()
+                # For dynamics visualization: use full original clip (T frames)
+                self.example_full_clip = x[:1].detach().cpu()
                 pred_indices = genie_output.output_tokens.argmax(dim=-1)
                 dyn_recon = self.tokenizer.decode_indices(pred_indices[:1]).detach().cpu()
-                first_frame = self.example_clip[:, :, :1]
+                first_frame = x[:1, :, :1].detach().cpu()
                 self.example_dynamics_recon = torch.cat([first_frame, dyn_recon], dim=2)
         self.log("val_lpips", lpips_val, prog_bar=False, logger=True, sync_dist=True)
         return total_loss
@@ -191,7 +200,9 @@ class GenieTrainingModule(L.LightningModule):
             )
         if wandb_logger is not None and self.example_dynamics_recon is not None:
             dyn_recon = (self.example_dynamics_recon.clamp(0, 1) * 255).to(torch.uint8)
-            dyn_video = torch.cat([clip, dyn_recon], dim=4)
+            # Use full clip (T frames) for dynamics comparison
+            full_clip = (self.example_full_clip.clamp(0, 1) * 255).to(torch.uint8)
+            dyn_video = torch.cat([full_clip, dyn_recon], dim=4)
             dyn_video = dyn_video.squeeze(0).permute(1, 0, 2, 3)
             wandb_logger.experiment.log(
                 {"dynamics_video": wandb.Video(dyn_video, fps=4, format="mp4")},
@@ -200,6 +211,7 @@ class GenieTrainingModule(L.LightningModule):
         self.example_clip = None
         self.example_recon = None
         self.example_dynamics_recon = None
+        self.example_full_clip = None
 
     def _get_wandb_logger(self) -> WandbLogger | None:
         if self.trainer.logger is None:

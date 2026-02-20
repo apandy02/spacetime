@@ -87,6 +87,18 @@ def build_causal_mask(seq_len: int, device=None, dtype=None) -> torch.Tensor:
     return ~mask
 
 
+def build_strictly_causal_mask(seq_len: int, device=None, dtype=None) -> torch.Tensor:
+    """
+    Strictly causal mask: each position can only attend to earlier positions (not itself).
+    Used in LAM decoder so that frame positions cannot see their own embeddings,
+    forcing prediction of the next frame from previous context only.
+    """
+    mask = torch.tril(
+        torch.ones(seq_len, seq_len, device=device, dtype=torch.bool), diagonal=-1
+    )
+    return ~mask
+
+
 def build_anti_causal_mask(seq_len: int, device=None, dtype=None) -> torch.Tensor:
     """
     Anti causal mask for the transformer that allows attention to one token in the future.

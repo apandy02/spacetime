@@ -6,7 +6,7 @@ from spacetime.models.genie.config import LamConfig
 from spacetime.models.tokenizer.model import VQVAEVideoEncoder
 from spacetime.modules.quantizers import EMAVectorQuantizer, QuantizerType, VanillaVectorQuantizer
 from spacetime.modules.transformer import STTransformerLayer
-from spacetime.modules.utils import build_anti_causal_mask, build_causal_mask, patchify, unpatchify
+from spacetime.modules.utils import build_anti_causal_mask, patchify, unpatchify
 
 
 class LatentActionModel(nn.Module):
@@ -85,10 +85,11 @@ class LatentActionModel(nn.Module):
         Takes as input:
             - x: [B, C, F, H, W] (the input video)
         Returns:
-            - frame_embeddings: [B, F, NUM_P, patch_dim], corresponding to the reconstructed frame patches
-            - encoder_output: [B, F, NUM_P, D_model], corresponding to the encoded frame embeddings
-            - action_codes: [B, F, NUM_P, D_codebook], corresponding to the quantized action codes
-            - action_indices: [B, F, NUM_P], corresponding to the codebook indices
+            - frame_reconstructions: [B, C, F-1, H, W], predictions for frames 2..F
+              (shifted target: position t predicts frame t+1)
+            - z_e: [B, F, NUM_P, D_codebook], continuous encoder outputs before quantization
+            - action_codes: [B, F, NUM_P, D_codebook], quantized action codes
+            - action_indices: [B, F, NUM_P], codebook indices
         """
         x = patchify(x, self.patch_size)  # [B, F, NUM_P, DIM_P]
         frame_embeddings = self.d_model_projection(x)
@@ -142,7 +143,7 @@ class LatentActionDecoder(nn.Module):
                     num_linear_layers,
                     num_groups,
                     dropout,
-                    mask=build_causal_mask,
+                    is_causal=True,
                 )
                 for _ in range(num_layers)
             ]
@@ -168,14 +169,12 @@ class LatentActionDecoder(nn.Module):
 
         Does:
             - Projects action embeddings to d_model: [B, T, N, D_model]
-            - Interleaves action and frame tokens: [a_1, f_1, a_2, f_2, ..., a_T, f_T]
-              This creates a sequence of length 2T where each frame f_t can attend to
-              its corresponding action a_t and all prior tokens via causal masking.
-            - Passes the resulting tensor through a stack of causal ST Transformer blocks
-            - Applies layer normalization
-            - Extracts only the frame positions (odd indices) for reconstruction
+            - Interleaves frame and action tokens: [f_1, a_1, f_2, a_2, ..., f_T, a_T]
+            - Uses causal masking with is_causal=True (enables flash attention)
+            - Extracts action positions 1, 3, ..., 2T-3 to predict frames 2..T
+              Position 2t-1 (a_t slot) sees f_1, a_1, ..., f_t, a_t → predicts f_{t+1}
         Outputs:
-            - [B, T, N, patch_dim], corresponding to the reconstructed frame patches
+            - [B, T-1, N, patch_dim], predictions for frames 2..T
         """
         action_embeddings = self.d_model_projection(action_embeddings)
 
@@ -192,12 +191,14 @@ class LatentActionDecoder(nn.Module):
             + self.token_type_embed[1].view(1, 1, 1, -1)
         )
 
-        # Interleave action and frame tokens along time dimension
+        # Interleave frame and action tokens: [f_1, a_1, f_2, a_2, ..., f_T, a_T]
+        # This ordering ensures that with causal masking, position 2t (f_{t+1} slot)
+        # sees f_1, a_1, ..., f_t, a_t - exactly what's needed to predict f_{t+1}
         batch_size, T, N, D = frame_embeddings.shape
-        x = torch.stack([action_embeddings, frame_embeddings], dim=2)  # [B, T, 2, N, D]
+        x = torch.stack([frame_embeddings, action_embeddings], dim=2)  # [B, T, 2, N, D]
         x = x.reshape(
             batch_size, 2 * T, N, D
-        )  # [a_1, f_1, a_2, f_2, ..., a_T, f_T] -> [B, 2T, N, D]
+        )  # [f_1, a_1, f_2, a_2, ..., f_T, a_T] -> [B, 2T, N, D]
 
         for layer in self.st_decoder:
             if self.gradient_checkpointing and self.training:
@@ -206,7 +207,9 @@ class LatentActionDecoder(nn.Module):
                 x = layer(x)
         x = self.layer_norm(x)
 
-        # Extract only frame positions (indices 1, 3, 5, ... i.e., odd indices)
-        x = x[:, 1::2, :, :]  # [B, T, N, D]
+        # Extract action positions 1, 3, ..., 2T-3 to predict frames 2, 3, ..., T.
+        # With causal mask, position 2t-1 (a_t slot) sees f_1, a_1, ..., f_t, a_t
+        # This is exactly the context needed to predict f_{t+1}.
+        x = x[:, 1::2, :, :][:, :-1, :, :]  # [B, T-1, N, D] - positions 1, 3, ..., 2T-3
         x = self.reconstruction_projector(x)
         return x
