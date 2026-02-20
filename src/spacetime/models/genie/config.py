@@ -24,8 +24,8 @@ class LamConfig:
     num_groups: int = 8
     dropout: float = 0.1
     gradient_checkpointing: bool = False
-    beta: float = 0.25
-    quantizer_type: QuantizerType = QuantizerType.VANILLA
+    beta: float = 0.05
+    quantizer_type: QuantizerType = QuantizerType.EMA
     quantizer_decay: float = 0.985
     quantizer_eps: float = 1e-5
     dead_code_threshold: float = 1e-4

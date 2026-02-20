@@ -50,10 +50,10 @@ experiment defaults change.
 
 | Exp ID | Tokenizer | LAM (layers/heads/d_model/codes/dim) | Dynamics (layers/heads/d_model/steps/temp/p) | Loss Weights (lambda_recon, beta) | Min Val Dyn Loss | LAM Perplexity | Min Val LPIPS | Epochs | Status | Notes |
 |--------|-----------|--------------------------------------|---------------------------------------------|-----------------------------------|------------------|----------------|---------------|--------|--------|-------|
-| 1v10p5qh | i9o9pcjj (P4-E04, ppl=421.6) | 8/8/512/6/32 | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | 0.757 | **1.0** ❌ | 0.00063 | 7/10 | Failed | Decoder could see target frame; codebook collapsed @ step ~200 |
-| zehhdgq5 | 61zybkcy (P4-E07, ppl=551.4) | 8/8/512/6/32 | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | 0.342 | **1.0** ❌ | 0.00066 | 7/10 | Failed | Decoder could see target frame; codebook collapsed @ step ~200 |
-| an9471sd | i9o9pcjj (P4-E04) | 8/8/512/6/32 | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | - | - | - | 0/10 | Running | Fixed: [f,a,f,a] ordering + predict from action positions |
-| TBD | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | - | - | - | - | Planned | Same fix + EMA quantizer |
+| 1v10p5qh | i9o9pcjj (P4-E04, ppl=421.6) | 8/8/512/6/32, VANILLA | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | 0.757 | **1.0** ❌ | 0.00063 | 7/10 | Failed | Decoder could see target frame; codebook collapsed @ step ~200 |
+| zehhdgq5 | 61zybkcy (P4-E07, ppl=551.4) | 8/8/512/6/32, VANILLA | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | 0.342 | **1.0** ❌ | 0.00066 | 7/10 | Failed | Decoder could see target frame; codebook collapsed @ step ~200 |
+| an9471sd | i9o9pcjj (P4-E04) | 8/8/512/6/32, VANILLA | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | - | **1.0** ❌ | - | - | Failed | Architecture fix only; beta too high, still collapsed |
+| TBD | i9o9pcjj (P4-E04) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | - | - | - | - | Planned | Architecture fix + EMA + low beta (matching tokenizer) |
 
 ---
 
