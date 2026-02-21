@@ -5,11 +5,11 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from torchvision.utils import make_grid, save_image
 from torch.utils.data import DataLoader, random_split
+from torchvision.utils import make_grid, save_image
 
-from spacetime.models.genie.training_module import GenieTrainingModule
 from spacetime.models.genie.config import Config
+from spacetime.models.genie.training_module import GenieTrainingModule
 from spacetime.utils import get_logger
 from spacetime.utils.data import ProcgenShardDataset
 
@@ -44,15 +44,35 @@ def main():
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Genie inference and evaluation")
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to Genie checkpoint")
-    parser.add_argument("--tokenizer_checkpoint", type=str, required=True, help="Path to tokenizer checkpoint")
-    parser.add_argument("--tokenizer_wandb_path", type=str, required=True, help="Path to tokenizer wandb config.yaml")
-    parser.add_argument("--shard_dir", type=str, default="data/procgen_heist/shards", help="Path to data shards")
+    parser.add_argument(
+        "--tokenizer_checkpoint", type=str, required=True, help="Path to tokenizer checkpoint"
+    )
+    parser.add_argument(
+        "--tokenizer_wandb_path",
+        type=str,
+        required=True,
+        help="Path to tokenizer wandb config.yaml",
+    )
+    parser.add_argument(
+        "--shard_dir", type=str, default="data/procgen_heist/shards", help="Path to data shards"
+    )
     parser.add_argument("--mode", type=str, choices=["single-step", "multi-step"], required=True)
-    parser.add_argument("--output_dir", type=str, default="outputs/genie_eval", help="Output directory")
+    parser.add_argument(
+        "--output_dir", type=str, default="outputs/genie_eval", help="Output directory"
+    )
     parser.add_argument("--batch_size", type=int, default=48, help="Batch size for data loading")
-    parser.add_argument("--num_samples", type=int, default=8, help="Number of samples to evaluate and save")
-    parser.add_argument("--num_context_frames", type=int, default=1, help="Context frames for rollout (multi-step only)")
-    parser.add_argument("--num_rollout_frames", type=int, default=15, help="Rollout length (multi-step only)")
+    parser.add_argument(
+        "--num_samples", type=int, default=8, help="Number of samples to evaluate and save"
+    )
+    parser.add_argument(
+        "--num_context_frames",
+        type=int,
+        default=1,
+        help="Context frames for rollout (multi-step only)",
+    )
+    parser.add_argument(
+        "--num_rollout_frames", type=int, default=15, help="Rollout length (multi-step only)"
+    )
     parser.add_argument("--device", type=str, default="cuda", help="Device")
     return parser.parse_args()
 
@@ -172,7 +192,9 @@ def single_step_reconstruction(
     for i in range(x.shape[0]):
         lpips_val = 0
         for f in range(ground_truth.shape[2]):
-            lpips_val += module.lpips_metric(ground_truth[i:i+1, :, f], predicted[i:i+1, :, f]).item()
+            lpips_val += module.lpips_metric(
+                ground_truth[i : i + 1, :, f], predicted[i : i + 1, :, f]
+            ).item()
         lpips_scores.append(lpips_val / ground_truth.shape[2])
 
     return {
@@ -226,8 +248,8 @@ def _run_multi_step(module, batch, args, output_dir: Path):
 
     for i in range(results["rollout"].shape[0]):
         save_rollout_video(
-            results["ground_truth"][i:i+1],
-            results["rollout"][i:i+1],
+            results["ground_truth"][i : i + 1],
+            results["rollout"][i : i + 1],
             output_dir / f"rollout_{i}.mp4",
         )
 
@@ -282,9 +304,7 @@ def multi_step_rollout(
             current_token_embs, actions, max_frames=actions.shape[1]
         )
 
-        next_frame = _predict_next_frame(
-            module.genie_model, current_token_embs, current_actions
-        )
+        next_frame = _predict_next_frame(module.genie_model, current_token_embs, current_actions)
         rollout_frames.append(next_frame)
 
         lpips_val = module.lpips_metric(x[:, :, frame_idx], next_frame).mean().item()
@@ -299,7 +319,7 @@ def multi_step_rollout(
     rollout = torch.stack(rollout_frames, dim=2)
 
     return {
-        "ground_truth": x[:, :, :rollout.shape[2]],
+        "ground_truth": x[:, :, : rollout.shape[2]],
         "rollout": rollout,
         "lpips_per_step": lpips_per_step,
     }
@@ -334,9 +354,7 @@ def _predict_next_frame(genie_model, token_embs, actions) -> torch.Tensor:
     """Run dynamics on the token sequence and decode the predicted next frame."""
     output_logits = genie_model.dynamics(token_embs, actions.detach())
     next_token_indices = output_logits[:, -1].argmax(dim=-1)
-    return genie_model.tokenizer.decode_indices(
-        next_token_indices.unsqueeze(1)
-    ).squeeze(2)
+    return genie_model.tokenizer.decode_indices(next_token_indices.unsqueeze(1)).squeeze(2)
 
 
 def _append_reencoded_frame(tokenizer, token_embs, frame) -> torch.Tensor:

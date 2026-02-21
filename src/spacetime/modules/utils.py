@@ -93,9 +93,7 @@ def build_strictly_causal_mask(seq_len: int, device=None, dtype=None) -> torch.T
     Used in LAM decoder so that frame positions cannot see their own embeddings,
     forcing prediction of the next frame from previous context only.
     """
-    mask = torch.tril(
-        torch.ones(seq_len, seq_len, device=device, dtype=torch.bool), diagonal=-1
-    )
+    mask = torch.tril(torch.ones(seq_len, seq_len, device=device, dtype=torch.bool), diagonal=-1)
     return ~mask
 
 

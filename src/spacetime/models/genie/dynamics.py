@@ -5,7 +5,6 @@ from torch.utils.checkpoint import checkpoint
 from spacetime.models.genie.config import DynamicsConfig, LamConfig
 from spacetime.models.tokenizer.config import TokenizerConfig
 from spacetime.modules.transformer import STTransformerLayer
-from spacetime.modules.utils import build_causal_mask
 
 
 class DynamicsModel(nn.Module):
