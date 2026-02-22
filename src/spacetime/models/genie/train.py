@@ -44,8 +44,16 @@ def build_checkpoint_callbacks(cfg: Config) -> list[ModelCheckpoint]:
         logger.info("Step-based checkpointing disabled (every_n_train_steps=%s)", step_interval)
         return []
 
+    monitor_metric: str | None = None
+    mode = "min"
+    if tc.checkpoint_save_top_k > 1:
+        monitor_metric = "step"
+        mode = "max"
+
     checkpoint_callback = ModelCheckpoint(
         filename="epoch={epoch}-step={step}",
+        monitor=monitor_metric,
+        mode=mode,
         every_n_train_steps=step_interval,
         every_n_epochs=None,
         save_on_train_epoch_end=False,
@@ -54,9 +62,10 @@ def build_checkpoint_callbacks(cfg: Config) -> list[ModelCheckpoint]:
         save_on_exception=tc.checkpoint_save_on_exception,
     )
     logger.info(
-        "Step checkpointing enabled: every %s steps, save_top_k=%s, save_last=%s, save_on_exception=%s",
+        "Step checkpointing enabled: every %s steps, save_top_k=%s, monitor=%s, save_last=%s, save_on_exception=%s",
         step_interval,
         tc.checkpoint_save_top_k,
+        monitor_metric if monitor_metric is not None else "none",
         tc.checkpoint_save_last,
         tc.checkpoint_save_on_exception,
     )
