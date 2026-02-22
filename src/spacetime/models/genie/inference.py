@@ -6,7 +6,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
-from torchvision.utils import make_grid, save_image
+from torchvision.utils import make_grid
 
 from spacetime.models.genie.config import Config
 from spacetime.models.genie.training_module import GenieTrainingModule
@@ -152,10 +152,10 @@ def _run_single_step(module, batch, args, output_dir: Path):
     logger.info("Average LPIPS: %.4f", avg_lpips)
     logger.info("Average dynamics CE: %.4f", avg_ce)
 
-    save_comparison_grid(
+    save_comparison_video(
         results["ground_truth"],
         results["predicted"],
-        output_dir / "single_step_comparison.png",
+        output_dir / "single_step_comparison.mp4",
         num_examples=args.num_samples,
     )
 
@@ -206,32 +206,36 @@ def single_step_reconstruction(
     }
 
 
-def save_comparison_grid(
+def save_comparison_video(
     ground_truth: torch.Tensor,
     predicted: torch.Tensor,
     output_path: Path,
     num_examples: int = 48,
-    frames_per_example: int = 4,
+    fps: int = 4,
+    max_columns: int = 4,
 ):
-    """
-    Save side-by-side comparison grid.
-
-    For each example, shows `frames_per_example` evenly-spaced frames:
-    row 1 = ground truth, row 2 = predicted.
-    """
+    """Save side-by-side GT|prediction comparison as an MP4 grid over time."""
     num_examples = min(num_examples, ground_truth.shape[0])
-    n_frames = ground_truth.shape[2]
-    frame_indices = torch.linspace(0, n_frames - 1, frames_per_example).long()
+    if num_examples == 0:
+        raise ValueError("No samples available to save comparison video")
 
-    rows = []
+    n_frames = min(ground_truth.shape[2], predicted.shape[2])
+    comparisons = []
     for i in range(num_examples):
-        gt_frames = ground_truth[i, :, frame_indices].permute(1, 0, 2, 3)
-        pred_frames = predicted[i, :, frame_indices].permute(1, 0, 2, 3)
-        rows.append(torch.cat([gt_frames, pred_frames], dim=0))
+        gt_video = ground_truth[i, :, :n_frames].permute(1, 0, 2, 3)
+        pred_video = predicted[i, :, :n_frames].permute(1, 0, 2, 3)
+        comparisons.append(torch.cat([gt_video, pred_video], dim=3))
 
-    grid = make_grid(torch.cat(rows, dim=0), nrow=frames_per_example, padding=2, normalize=True)
-    save_image(grid, output_path)
-    logger.info("Saved comparison grid to %s", output_path)
+    tiled = torch.stack(comparisons, dim=1)
+    nrow = min(max_columns, num_examples)
+    grid_frames = []
+    for t in range(n_frames):
+        frame_grid = make_grid(tiled[t], nrow=nrow, padding=2, normalize=False)
+        grid_frames.append(frame_grid)
+
+    video = torch.stack(grid_frames, dim=0)
+    _write_mp4(video, output_path, fps=fps)
+    logger.info("Saved comparison video to %s", output_path)
 
 
 def _run_multi_step(module, batch, args, output_dir: Path):
@@ -253,12 +257,11 @@ def _run_multi_step(module, batch, args, output_dir: Path):
             output_dir / f"rollout_{i}.mp4",
         )
 
-    save_comparison_grid(
+    save_comparison_video(
         results["ground_truth"],
         results["rollout"],
-        output_dir / "rollout_comparison.png",
+        output_dir / "rollout_comparison.mp4",
         num_examples=args.num_samples,
-        frames_per_example=8,
     )
 
 
@@ -370,14 +373,36 @@ def save_rollout_video(
     fps: int = 4,
 ):
     """Save ground truth and rollout side-by-side as a video."""
-    import imageio
-
     combined = torch.cat([ground_truth, rollout], dim=4)
-    video = combined[0].permute(1, 2, 3, 0)
-    video = (video.clamp(0, 1) * 255).to(torch.uint8).cpu().numpy()
-
-    imageio.mimwrite(output_path, video, fps=fps)
+    video = combined[0].permute(1, 0, 2, 3)
+    _write_mp4(video, output_path, fps=fps)
     logger.info("Saved rollout video to %s", output_path)
+
+
+def _write_mp4(video_tchw: torch.Tensor, output_path: Path, fps: int = 4):
+    """Write [T, C, H, W] float video tensor to mp4 using imageio-ffmpeg directly."""
+    import imageio_ffmpeg
+    import numpy as np
+
+    frames = (
+        (video_tchw.clamp(0, 1) * 255).to(torch.uint8).cpu().permute(0, 2, 3, 1).contiguous().numpy()
+    )
+    height, width = frames.shape[1], frames.shape[2]
+    writer = imageio_ffmpeg.write_frames(
+        str(output_path),
+        size=(width, height),
+        pix_fmt_in="rgb24",
+        pix_fmt_out="yuv420p",
+        fps=fps,
+        codec="libx264",
+        macro_block_size=16,
+    )
+    writer.send(None)
+    try:
+        for frame in frames:
+            writer.send(np.ascontiguousarray(frame))
+    finally:
+        writer.close()
 
 
 if __name__ == "__main__":
