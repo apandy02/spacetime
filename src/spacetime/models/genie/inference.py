@@ -26,6 +26,7 @@ def main():
         args.checkpoint,
         args.tokenizer_checkpoint,
         args.tokenizer_wandb_path,
+        args.eval_p_sample,
         args.device,
     )
 
@@ -73,6 +74,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--num_rollout_frames", type=int, default=15, help="Rollout length (multi-step only)"
     )
+    parser.add_argument(
+        "--eval_p_sample",
+        type=float,
+        default=0.0,
+        help="Dynamics masking rate at eval time (set 0.0 for deterministic no-mask inference)",
+    )
     parser.add_argument("--device", type=str, default="cuda", help="Device")
     return parser.parse_args()
 
@@ -81,6 +88,7 @@ def load_model(
     checkpoint_path: str,
     tokenizer_checkpoint: str,
     tokenizer_wandb_path: str,
+    eval_p_sample: float,
     device: str = "cuda",
 ) -> GenieTrainingModule:
     """Load trained Genie model from checkpoint."""
@@ -104,6 +112,13 @@ def load_model(
     if load_result.unexpected_keys:
         logger.warning("Unexpected checkpoint keys: %s", load_result.unexpected_keys)
     module.eval()
+    old_p_sample = module.genie_model.dynamics.p_sample
+    module.genie_model.dynamics.p_sample = eval_p_sample
+    logger.info(
+        "Set dynamics eval p_sample from %.3f to %.3f",
+        old_p_sample,
+        module.genie_model.dynamics.p_sample,
+    )
     module.to(device)
     return module
 

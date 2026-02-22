@@ -18,7 +18,20 @@ The model has three components, combined in `GenieModel` (`model.py`):
 
 ```
 uv run python -m spacetime.models.genie.train --help
+
+# Resume from a checkpoint
+uv run python -m spacetime.models.genie.train \
+    --tokenizer_checkpoint lightning_logs/<tok_id>/version_0/checkpoints/<tok_ckpt>.ckpt \
+    --tokenizer_wandb_path wandb/run-<date>-<tok_id>/files/config.yaml \
+    --training.ckpt_path lightning_logs/<run_id>/version_0/checkpoints/<genie_ckpt>.ckpt
 ```
+
+Checkpointing defaults:
+
+- `training.checkpoint_every_n_train_steps=1000`
+- `training.checkpoint_save_top_k=3`
+- `training.checkpoint_save_last=true`
+- `training.checkpoint_save_on_exception=true`
 
 ## Inference
 

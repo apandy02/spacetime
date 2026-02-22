@@ -67,6 +67,11 @@ class TrainingConfig:
     max_epochs: int = 10
     precision: str = "bf16-mixed"
     matmul_precision: str = "high"
+    ckpt_path: Path | None = None
+    checkpoint_every_n_train_steps: int = 1_000
+    checkpoint_save_top_k: int = 3
+    checkpoint_save_last: bool = True
+    checkpoint_save_on_exception: bool = True
     compile_model: bool = False
     compile_backend: str = "inductor"
     compile_mode: str = "default"

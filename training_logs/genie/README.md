@@ -72,6 +72,22 @@ experiment defaults change.
 
 ---
 
+## Current Eval Snapshot (2026-02-22)
+
+Evaluated checkpoints:
+
+- `bcl9gigk` @ `epoch=1-step=27778` with tokenizer `61zybkcy` (`epoch=22-step=239591`)
+- `zbn6i2np` @ `epoch=1-step=27778` with tokenizer `i9o9pcjj` (`epoch=22-step=239591`)
+
+Observations:
+
+- **Single-step quality is acceptable** for both runs, with `bcl9gigk` appearing modestly stronger.
+- **Multi-step autoregressive rollouts degrade quickly** for both runs, with increasing tile-local visual artifacts over horizon.
+- Failure mode is most consistent with **compounding dynamics token errors under autoregressive feedback**: one-step predictions are usable, but error accumulation rapidly destabilizes longer rollouts.
+- At this stage, results support a **relative** conclusion (`bcl9gigk` > `zbn6i2np`), but not a claim of robust long-horizon world-model quality yet.
+
+---
+
 ## Ablations / Ideas to Try
 
 - ~~EMA quantizer vs VANILLA for LAM codebook~~ (EMA works, VANILLA collapses)
