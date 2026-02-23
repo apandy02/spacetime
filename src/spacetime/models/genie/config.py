@@ -72,6 +72,7 @@ class TrainingConfig:
     checkpoint_save_top_k: int = 3
     checkpoint_save_last: bool = True
     checkpoint_save_on_exception: bool = True
+    codebook_stats_every_n_steps: int = 50
     compile_model: bool = False
     compile_backend: str = "inductor"
     compile_mode: str = "default"

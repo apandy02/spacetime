@@ -75,18 +75,33 @@ def build_checkpoint_callbacks(cfg: Config) -> list[ModelCheckpoint]:
 def run(cfg: Config) -> None:
     maybe_set_wandb_sandbox_key()
     maybe_disable_wandb_for_non_zero_ranks()
-    logger.info("Starting latent action training")
     tc = cfg.training
     if tc.matmul_precision:
         torch.set_float32_matmul_precision(tc.matmul_precision)
-    logger.info("Shard dir: %s", tc.shard_dir)
-    logger.info("Train/val batch size: %s", tc.batch_size)
 
+    logger.info("Starting Genie training (shard_dir=%s, batch_size=%s)", tc.shard_dir, tc.batch_size)
+
+    train_dataloader, val_dataloader = create_dataloaders(cfg)
+    lightning_module = build_model(cfg)
+    trainer = build_trainer(cfg)
+
+    if tc.ckpt_path is not None:
+        logger.info("Resuming from checkpoint: %s", tc.ckpt_path)
+    trainer.fit(
+        model=lightning_module,
+        train_dataloaders=train_dataloader,
+        val_dataloaders=val_dataloader,
+        ckpt_path=str(tc.ckpt_path) if tc.ckpt_path is not None else None,
+    )
+    logger.info("Training complete")
+
+
+def create_dataloaders(cfg: Config) -> tuple[DataLoader, DataLoader]:
+    tc = cfg.training
     tc.shard_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Loading ProcgenShardDataset from %s", tc.shard_dir)
     shard_dataset = ProcgenShardDataset(tc.shard_dir, normalize=True)
-    logger.info("Loaded dataset with %d samples", len(shard_dataset))
+    logger.info("Loaded dataset with %d samples from %s", len(shard_dataset), tc.shard_dir)
 
     train_size = int(tc.train_ratio * len(shard_dataset))
     val_size = len(shard_dataset) - train_size
@@ -97,7 +112,6 @@ def run(cfg: Config) -> None:
         generator=torch.Generator().manual_seed(42),
     )
 
-    logger.info("Creating train and validation dataloaders")
     dataloader_kwargs = {
         "batch_size": tc.batch_size,
         "num_workers": tc.num_workers,
@@ -107,26 +121,19 @@ def run(cfg: Config) -> None:
         dataloader_kwargs["persistent_workers"] = tc.persistent_workers
         dataloader_kwargs["prefetch_factor"] = tc.prefetch_factor
 
-    train_dataloader = DataLoader(
-        train_dataset,
-        shuffle=True,
-        **dataloader_kwargs,
-    )
-    val_dataloader = DataLoader(
-        val_dataset,
-        shuffle=False,
-        **dataloader_kwargs,
-    )
+    train_dataloader = DataLoader(train_dataset, shuffle=True, **dataloader_kwargs)
+    val_dataloader = DataLoader(val_dataset, shuffle=False, **dataloader_kwargs)
 
     logger.info(
-        "Dataloaders created: %d training batches, %d validation batches",
+        "Dataloaders ready: %d training batches, %d validation batches",
         len(train_dataloader),
         len(val_dataloader),
     )
+    return train_dataloader, val_dataloader
 
-    loggers = setup_loggers(cfg)
-    checkpoint_callbacks = build_checkpoint_callbacks(cfg)
 
+def build_model(cfg: Config) -> GenieTrainingModule:
+    tc = cfg.training
     lightning_module = GenieTrainingModule(cfg)
     if tc.compile_model:
         lightning_module.genie_model = torch.compile(
@@ -134,26 +141,27 @@ def run(cfg: Config) -> None:
             backend=tc.compile_backend,
             mode=tc.compile_mode,
         )
+    return lightning_module
 
+
+def build_trainer(cfg: Config) -> L.Trainer:
+    tc = cfg.training
+    strategy = _select_training_strategy()
     logger.info("Initializing trainer (max_epochs=%s, precision=%s)", tc.max_epochs, tc.precision)
-    trainer = L.Trainer(
+    logger.info("Trainer strategy: %s", strategy)
+    return L.Trainer(
         max_epochs=tc.max_epochs,
         precision=tc.precision,
-        strategy="ddp_find_unused_parameters_true",
-        logger=loggers,
-        callbacks=checkpoint_callbacks,
-    )
-    if tc.ckpt_path is not None:
-        logger.info("Resuming from checkpoint: %s", tc.ckpt_path)
-    logger.info("Starting fit loop")
-    trainer.fit(
-        model=lightning_module,
-        train_dataloaders=train_dataloader,
-        val_dataloaders=val_dataloader,
-        ckpt_path=str(tc.ckpt_path) if tc.ckpt_path is not None else None,
+        strategy=strategy,
+        logger=setup_loggers(cfg),
+        callbacks=build_checkpoint_callbacks(cfg),
     )
 
-    logger.info("Training complete")
+
+def _select_training_strategy() -> str:
+    if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+        return "ddp_find_unused_parameters_true"
+    return "auto"
 
 
 def main() -> None:

@@ -296,6 +296,12 @@ class GenieTrainingModule(L.LightningModule):
     def _log_lam_codebook_usage(self, indices, is_training: bool) -> None:
         if indices is None:
             return
+        if is_training:
+            step_interval = self.cfg.training.codebook_stats_every_n_steps
+            if step_interval <= 0:
+                return
+            if self.global_step % step_interval != 0:
+                return
 
         codebook_size = self.genie_model.lam.vector_quantizer.codebook_size
         flat_indices = indices.reshape(-1)

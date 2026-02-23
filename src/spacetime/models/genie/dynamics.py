@@ -116,9 +116,16 @@ class DynamicsModel(nn.Module):
         batch_size, n_frames, n_tokens, _ = tokens.shape
 
         if self.training:
-            mask_rate = torch.empty(1, device=tokens.device).uniform_(0.5, 1.0).item()
+            mask_rate = torch.empty(
+                (1, 1, 1), device=tokens.device, dtype=tokens.dtype
+            ).uniform_(0.5, 1.0)
         else:
-            mask_rate = self.p_sample
+            mask_rate = torch.full(
+                (1, 1, 1),
+                self.p_sample,
+                device=tokens.device,
+                dtype=tokens.dtype,
+            )
 
         a = torch.empty(
             (batch_size, n_frames, n_tokens),
