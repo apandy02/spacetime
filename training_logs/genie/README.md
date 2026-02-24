@@ -53,8 +53,12 @@ experiment defaults change.
 | 1v10p5qh | i9o9pcjj (P4-E04, ppl=421.6) | 8/8/512/6/32, VANILLA | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | 0.757 | **1.0** ❌ | 0.00063 | 7/10 | Failed | Decoder could see target frame; codebook collapsed @ step ~200 |
 | zehhdgq5 | 61zybkcy (P4-E07, ppl=551.4) | 8/8/512/6/32, VANILLA | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | 0.342 | **1.0** ❌ | 0.00066 | 7/10 | Failed | Decoder could see target frame; codebook collapsed @ step ~200 |
 | an9471sd | i9o9pcjj (P4-E04) | 8/8/512/6/32, VANILLA | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | - | **1.0** ❌ | - | - | Failed | Architecture fix only; beta too high, still collapsed |
-| zbn6i2np | i9o9pcjj (P4-E04) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | 0.836 | ~3.0 ✓ | 0.0262 | 1/10 | Running | Architecture fix + EMA + low beta; no collapse |
-| bcl9gigk | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | 0.373 | ~2.6 ✓ | 0.0257 | 1/10 | Running | Architecture fix + EMA + low beta; no collapse |
+| zbn6i2np | i9o9pcjj (P4-E04) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | 0.836 | ~3.0 ✓ | 0.0262 | 1/10 | Stopped | Architecture fix + EMA + low beta; no collapse. Used as eval baseline. |
+| bcl9gigk | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | 0.373 | ~2.6 ✓ | 0.0257 | 1/10 | Stopped | Architecture fix + EMA + low beta; strongest early baseline. |
+| 4q0usk1i | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | - | ~2.16 | - | 2+ | Interrupted | Phase 1 of ongoing chain; VM crash; resumed as `wdxomlz6`. |
+| cj2tuclk | i9o9pcjj (P4-E04) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | - | ~2.81 | - | 2+ | Interrupted | Phase 1 of ongoing chain; VM crash; resumed as `rqi23ryz`. |
+| wdxomlz6 | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | **0.307** | ~1.33 | **0.01646** | 4+ | Running | Phase 2 of split run (`4q0usk1i -> wdxomlz6`), then resumed again from `lightning_logs/wdxomlz6/version_0/checkpoints/last.ckpt` after VM crash. |
+| rqi23ryz | i9o9pcjj (P4-E04) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | 0.700 | ~2.74 | **0.01639** | 4+ | Running | Phase 2 of split run (`cj2tuclk -> rqi23ryz`), then resumed again from `lightning_logs/rqi23ryz/version_0/checkpoints/last.ckpt` after VM crash. |
 
 ---
 
