@@ -55,10 +55,8 @@ experiment defaults change.
 | an9471sd | i9o9pcjj (P4-E04) | 8/8/512/6/32, VANILLA | 12/8/512/25/1.0/0.2 | 1.0, 0.25 | - | **1.0** ❌ | - | - | Failed | Architecture fix only; beta too high, still collapsed |
 | zbn6i2np | i9o9pcjj (P4-E04) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | 0.836 | ~3.0 ✓ | 0.0262 | 1/10 | Stopped | Architecture fix + EMA + low beta; no collapse. Used as eval baseline. |
 | bcl9gigk | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | 0.373 | ~2.6 ✓ | 0.0257 | 1/10 | Stopped | Architecture fix + EMA + low beta; strongest early baseline. |
-| 4q0usk1i | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | - | ~2.16 | - | 2+ | Interrupted | Phase 1 of ongoing chain; VM crash; resumed as `wdxomlz6`. |
-| cj2tuclk | i9o9pcjj (P4-E04) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | - | ~2.81 | - | 2+ | Interrupted | Phase 1 of ongoing chain; VM crash; resumed as `rqi23ryz`. |
-| wdxomlz6 | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | **0.307** | ~1.33 | **0.01646** | 4+ | Running | Phase 2 of split run (`4q0usk1i -> wdxomlz6`), then resumed again from `lightning_logs/wdxomlz6/version_0/checkpoints/last.ckpt` after VM crash. |
-| rqi23ryz | i9o9pcjj (P4-E04) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | 0.700 | ~2.74 | **0.01639** | 4+ | Running | Phase 2 of split run (`cj2tuclk -> rqi23ryz`), then resumed again from `lightning_logs/rqi23ryz/version_0/checkpoints/last.ckpt` after VM crash. |
+| 4q0usk1i -> wdxomlz6 -> fvg686wc | 61zybkcy (P4-E07) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | **0.285** | ~1.04 | **0.01392** | 7+ | Running | Single continuous experiment split across VM crashes. Phase 1 (`4q0usk1i`, step `27799 -> 33999`): train loss ended ~`0.356`. Phase 2 (`wdxomlz6`, step `34049 -> 56049`): val loss improved `0.3215 -> 0.3071` (val LPIPS `0.01700 -> 0.01646`). Phase 3 (`fvg686wc`, step `56049 -> 100k+`): train loss in low `0.33` range and best val loss/LPIPS reached `0.2847` / `0.01392`, but action perplexity drifted down near `1.04` (near-collapse regime). |
+| cj2tuclk -> rqi23ryz -> plzyddbz | i9o9pcjj (P4-E04) | 8/8/512/6/32, EMA | 12/8/512/25/1.0/0.2 | 1.0, 0.05 | 0.660 | ~1.63 | 0.01429 | 7+ | Running | Single continuous experiment split across VM crashes. Phase 1 (`cj2tuclk`, step `27799 -> 34049`): train loss ended ~`0.887`. Phase 2 (`rqi23ryz`, step `34099 -> 56099`): val loss improved `0.7320 -> 0.7004` (val LPIPS `0.01798 -> 0.01639`). Phase 3 (`plzyddbz`, step `56049 -> 100k+`): train loss now around `0.75-0.78`, best val loss/LPIPS reached `0.65998` / `0.01429`, with noisy but non-collapsed action perplexity (roughly `1.03-1.9`). |
 
 ---
 
@@ -73,6 +71,7 @@ experiment defaults change.
 4. **Dynamics loss differs by tokenizer**: P4-E07 gives lower dynamics loss (0.37 vs 0.84) due to different codebook distributions. Not directly comparable across tokenizers.
 
 5. **LAM continues learning**: Recon loss keeps improving (5.3e-4 → 4.7e-4 from step 10k-20k), confirming LAM learns through reconstruction signal even after dynamics loss plateaus.
+6. **Dynamics can keep improving even with weak action-code usage**: In the >100k-step phase-3 runs, dynamics/train loss continues to decrease while action perplexity can remain low (especially `fvg686wc`), so low perplexity alone does not imply immediate dynamics failure.
 
 ---
 
